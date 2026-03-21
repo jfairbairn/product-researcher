@@ -1,0 +1,16 @@
+{
+  "productionPaths": [
+    "src/",
+    "lib/",
+    "app/"
+  ],
+  "testPaths": [
+    "tests/",
+    "__tests__/"
+  ],
+  "testFilePatterns": [
+    "\\.test\\.",
+    "\\.spec\\."
+  ],
+  "testCommand": "npm test"
+}
