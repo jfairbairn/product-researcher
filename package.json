@@ -1,18 +1,21 @@
 {
   "name": "product-researcher",
+  "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
+  "type": "module",
   "scripts": {
-    "test": "npm run test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev": "concurrently \"npm run dev -w @product-researcher/frontend\" \"npm run dev -w @product-researcher/backend\"",
-    "dev:worker": "npm run dev:worker -w @product-researcher/backend"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.0",
+    "tavily": "^1.0.2"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@mariozechner/pi-coding-agent": "*",
+    "@types/node": "^22.13.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
   }
 }

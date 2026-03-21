@@ -1,15 +1,6 @@
 {
-  "productionPaths": [
-    "backend/src/",
-    "frontend/src/"
-  ],
-  "testPaths": [
-    "backend/tests/",
-    "frontend/src/"
-  ],
-  "testFilePatterns": [
-    "\\.test\\.",
-    "\\.spec\\."
-  ],
+  "productionPaths": ["src/", ".pi/extensions/"],
+  "testPaths": ["tests/"],
+  "testFilePatterns": ["\\.test\\.", "\\.spec\\."],
   "testCommand": "npm test"
 }
