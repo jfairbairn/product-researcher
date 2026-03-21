@@ -1,60 +1,73 @@
 # Product
 
-> What this product is for, and how we'll know it's working.
-
 ## Purpose
 
-[One paragraph: what problem does this product solve, for whom, and why it matters.]
+Product Researcher is an agentic system that continuously performs web research to surface product opportunities. Starting from seed ideas — an initial product hypothesis, a trend observation, a market question — it builds and maintains a structured knowledge graph of observations, hypotheses, pain points, existing solutions, and product plans. Outputs are intended to feed a downstream agentic coding system that turns validated product plans into running software and observes real-world responses.
+
+The system models: reported and inferred user needs, pain points, existing solutions and their strengths/weaknesses, business models and commercial prospects of competitors, market size, segmentation, and positioning.
 
 ---
 
 ## Success Conditions
 
-Each feature's success conditions define the measurable outcomes that confirm it is working as intended. They are hypotheses — resolved by production data after deployment.
-
-Format: "We will know [feature] is working when [specific measurable outcome]."
-
-### [Feature name]
+### Seed research cycle
 
 **We will know this is working when:**
-- [Specific measurable condition, e.g. "70% of new users complete onboarding in their first session"]
-- [Specific measurable condition, e.g. "payment error rate stays below 0.1%"]
-- [Performance condition if applicable, e.g. "95th percentile checkout latency < 3 seconds"]
+- A seed idea submitted by the user results in at least 10 research nodes being created within one agent run
+- The knowledge graph contains at least one node of each type: `observation`, `hypothesis`, `pain_point`, `existing_solution`
+- Agent runs complete without error for ≥ 95% of submissions
 
-**Telemetry spec** (events required to measure the above):
+**Telemetry spec:**
 
 | Event | Trigger | Required properties |
 |-------|---------|-------------------|
-| `[event.name]` | [When it fires] | [Properties needed to compute success conditions] |
+| `research.run.started` | Agent run begins | `seed_id`, `model`, `run_id` |
+| `research.run.completed` | Agent run finishes | `seed_id`, `run_id`, `node_count`, `duration_ms` |
+| `research.run.failed` | Agent run errors | `seed_id`, `run_id`, `error_type` |
+| `research.node.created` | A node is added to the graph | `seed_id`, `run_id`, `node_type` |
 
 **Success condition queries (HogQL):**
 
-Use `check_success_conditions` to run these automatically. Format: SQL query + `-- target:` comment.
+```sql
+-- Node creation rate per run
+SELECT avg(properties.node_count) AS avg_nodes_per_run
+FROM events
+WHERE event = 'research.run.completed'
+  AND timestamp >= now() - interval 30 day
+-- target: 10
+```
 
 ```sql
--- [Describe what this measures]
-SELECT countIf(event = 'feature.completed') / countIf(event = 'feature.started') AS rate
+-- Agent run success rate
+SELECT countIf(event = 'research.run.completed') /
+       countIf(event = 'research.run.started') AS success_rate
 FROM events
 WHERE timestamp >= now() - interval 30 day
--- target: 0.70
+-- target: 0.95
 ```
 
-```sql
--- [Describe what this measures — one query per success condition]
-SELECT count() AS adoption_count
-FROM events
-WHERE event = 'feature.used'
-  AND timestamp >= now() - interval 30 day
--- target: 1000
-```
+**Validation status:** not yet deployed
 
-**Validation status:** not yet deployed / collecting data / confirmed / refuted
+---
+
+### Knowledge graph quality
+
+**We will know this is working when:**
+- ≥ 80% of completed runs produce nodes of at least 3 distinct types
+- Users rate research outputs ≥ 4/5 on relevance (once rating UI exists)
+
+**Telemetry spec:**
+
+| Event | Trigger | Required properties |
+|-------|---------|-------------------|
+| `research.graph.reviewed` | User views a seed's graph | `seed_id`, `node_count`, `edge_count` |
+
+**Validation status:** not yet deployed
 
 ---
 
 ## Notes
 
-- Success conditions should be specific enough to be falsifiable — "users like it" is not measurable
-- The telemetry spec is a first-class requirement: event emission is specced and tested in the BDD cycle
-- Gate 5 of release readiness (measurement readiness) cannot pass without success conditions and a telemetry spec
-- Validation status is updated once sufficient production data has been collected
+- The downstream coding agent that consumes product plans is out of scope for this product's success conditions — we measure what this system produces, not what consumers do with it.
+- LLM provider is configurable per run; success conditions are provider-agnostic.
+- Gate 5 of release readiness (measurement readiness) cannot pass without these success conditions being emitted and queryable.

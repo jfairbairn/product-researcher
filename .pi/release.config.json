@@ -1,0 +1,26 @@
+{
+  "_note": "Hetzner/Coolify not yet provisioned. Fill in COOLIFY_* values once the server is set up.",
+
+  "staging": {
+    "deployCommand": "curl -sf -X POST 'https://coolify.YOURDOMAIN/api/v1/deploy?uuid=$COOLIFY_STAGING_UUID&force=false' -H 'Authorization: Bearer $COOLIFY_API_TOKEN'",
+    "url": "https://staging.YOURDOMAIN",
+    "healthCheckPath": "/health",
+    "migrationsCommand": "docker compose -f docker-compose.staging.yml exec -T backend node backend/dist/db/migrate.js",
+    "testCommand": null,
+    "sanitisationCheckQuery": "psql $STAGING_DATABASE_URL -t -c \"SELECT COUNT(*) FROM seeds WHERE created_at < now() - interval '1 day'\" 2>/dev/null | tr -d ' '"
+  },
+
+  "production": {
+    "deployCommand": "curl -sf -X POST 'https://coolify.YOURDOMAIN/api/v1/deploy?uuid=$COOLIFY_PRODUCTION_UUID&force=false' -H 'Authorization: Bearer $COOLIFY_API_TOKEN'",
+    "url": "https://YOURDOMAIN",
+    "healthCheckPath": "/health",
+    "migrationsCommand": "docker compose exec -T backend node backend/dist/db/migrate.js"
+  },
+
+  "nonFunctional": {
+    "testCommand": null,
+    "latencyThresholdMs": 2000
+  },
+
+  "skipGates": [3]
+}

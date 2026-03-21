@@ -1,12 +1,11 @@
 {
   "productionPaths": [
-    "src/",
-    "lib/",
-    "app/"
+    "backend/src/",
+    "frontend/src/"
   ],
   "testPaths": [
-    "tests/",
-    "__tests__/"
+    "backend/tests/",
+    "frontend/src/"
   ],
   "testFilePatterns": [
     "\\.test\\.",
