@@ -6,9 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { searchWeb } from './tools/search.ts'
 import { readPage } from './tools/read-page.ts'
 import { createSeed, listSeeds } from './tools/seeds.ts'
-import { createNode } from './tools/graph.ts'
-import { queryGraph } from './tools/graph.ts'
-import { startRun, completeRun } from './tools/budget.ts'
+import { createNode, queryGraph } from './tools/graph.ts'
 
 const NODE_TYPES = ['observation', 'hypothesis', 'conjecture', 'pain_point', 'existing_solution', 'validation_strategy', 'product_plan'] as const
 
@@ -54,11 +52,10 @@ export default function setup(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'create_seed',
     label: 'Create Seed',
-    description: 'Create a new research seed with a slug, title, and budget.',
+    description: 'Create a new research seed with a slug and title.',
     parameters: Type.Object({
       slug: Type.String({ description: 'URL-safe identifier, e.g. ai-coding-tools' }),
       title: Type.String({ description: 'Human-readable title' }),
-      budgetUsd: Type.Number({ description: 'Default research budget in USD' }),
     }),
     async execute(_id, params) {
       await createSeed(params, seedsDir)
@@ -73,7 +70,7 @@ export default function setup(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'list_seeds',
     label: 'List Seeds',
-    description: 'List all research seeds with their status and budget.',
+    description: 'List all research seeds with their status.',
     parameters: Type.Object({}),
     async execute() {
       const seeds = await listSeeds(seedsDir)
@@ -131,57 +128,17 @@ export default function setup(pi: ExtensionAPI): void {
     },
   })
 
-  // ── start_run ─────────────────────────────────────────────────────────────
-  pi.registerTool({
-    name: 'start_run',
-    label: 'Start Run',
-    description: 'Create a new research run record for a seed and return its run ID.',
-    parameters: Type.Object({
-      seed: Type.String({ description: 'Seed slug' }),
-      budgetUsd: Type.Number({ description: 'Budget for this run in USD' }),
-    }),
-    async execute(_id, params) {
-      const { runId } = await startRun(params, seedsDir)
-      return {
-        content: [{ type: 'text', text: runId }],
-        details: { runId },
-      }
-    },
-  })
-
-  // ── complete_run ──────────────────────────────────────────────────────────
-  pi.registerTool({
-    name: 'complete_run',
-    label: 'Complete Run',
-    description: 'Mark a research run as completed and record a summary.',
-    parameters: Type.Object({
-      seed: Type.String({ description: 'Seed slug' }),
-      runId: Type.String({ description: 'Run ID returned by start_run' }),
-      summary: Type.String({ description: 'Brief summary of what was found this run' }),
-    }),
-    async execute(_id, params) {
-      await completeRun(params, seedsDir)
-      return {
-        content: [{ type: 'text', text: `Run '${params.runId}' completed.` }],
-        details: {},
-      }
-    },
-  })
-
   // ── /research command ─────────────────────────────────────────────────────
   pi.registerCommand('research', {
-    description: 'Start a research session against a seed: /research <slug> [budget-usd]',
+    description: 'Start a research session against a seed: /research <slug>',
     handler: async (args, ctx) => {
-      const parts = (args ?? '').trim().split(/\s+/)
-      const slug = parts[0]
-      const budgetUsd = parts[1] ? parseFloat(parts[1]) : undefined
+      const slug = (args ?? '').trim()
 
       if (!slug) {
-        ctx.ui.notify('Usage: /research <slug> [budget-usd]', 'error')
+        ctx.ui.notify('Usage: /research <slug>', 'error')
         return
       }
 
-      // Read seed context
       let seedMd: string
       let indexMd: string
       try {
@@ -191,13 +148,6 @@ export default function setup(pi: ExtensionAPI): void {
         ctx.ui.notify(`Seed '${slug}' not found. Create it first with the create_seed tool.`, 'error')
         return
       }
-
-      // Extract default budget from seed.md if not overridden
-      const seedBudget = parseFloat(seedMd.match(/budget_usd:\s*([\d.]+)/)?.[1] ?? '1')
-      const budget = budgetUsd ?? seedBudget
-
-      // Start a run record
-      const { runId } = await startRun({ seed: slug, budgetUsd: budget }, seedsDir)
 
       const prompt = `You are a product researcher. Your job is to research the seed idea below and build a knowledge graph of findings.
 
@@ -209,27 +159,21 @@ ${seedMd}
 
 ${indexMd}
 
-## Your Run
-
-Run ID: ${runId}
-Budget: $${budget} USD
-
 ## Instructions
 
-1. Call \`start_run\` is already done — your run ID is **${runId}**.
-2. Use \`search_web\` to find relevant pages. Use targeted queries.
-3. Use \`read_page\` to read promising pages in full.
-4. Use \`query_graph\` to check what nodes already exist before creating duplicates.
-5. Use \`create_node\` to record findings as typed nodes:
+1. Use \`search_web\` to find relevant pages. Use targeted queries.
+2. Use \`read_page\` to read promising pages in full.
+3. Use \`query_graph\` to check what nodes already exist before creating duplicates.
+4. Use \`create_node\` to record findings as typed nodes:
    - \`observation\` — a concrete fact you found
    - \`pain_point\` — a problem users face
    - \`existing_solution\` — a competitor or workaround
    - \`hypothesis\` — a testable belief
    - \`conjecture\` — a speculative idea
-6. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`).
-7. When you are done or near your budget, update \`_index.md\` with a summary of key findings, open questions, and promising directions — then call \`complete_run\`.
+5. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`).
+6. When you are satisfied with the depth of research, update \`_index.md\` with a summary of key findings, open questions, and promising directions.
 
-Stay focused. Prefer depth over breadth. Stop gracefully before exhausting your budget.`
+Stay focused. Prefer depth over breadth.`
 
       pi.sendUserMessage(prompt)
     },

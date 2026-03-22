@@ -48,8 +48,6 @@ describe('researcher extension', () => {
     'list_seeds',
     'create_node',
     'query_graph',
-    'start_run',
-    'complete_run',
   ]
 
   for (const tool of expectedTools) {

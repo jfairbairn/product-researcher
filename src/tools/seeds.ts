@@ -4,27 +4,23 @@ import { join } from 'node:path'
 export interface SeedOptions {
   slug: string
   title: string
-  budgetUsd: number
 }
 
 export interface SeedSummary {
   slug: string
   title: string
   status: string
-  budgetUsd: number
 }
 
 export async function createSeed(options: SeedOptions, seedsDir: string): Promise<void> {
-  const { slug, title, budgetUsd } = options
+  const { slug, title } = options
   const seedDir = join(seedsDir, slug)
 
-  // Check for duplicates
   try {
     await access(seedDir)
     throw new Error(`Seed '${slug}' already exists`)
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes('already exists')) throw err
-    // Directory doesn't exist — good, proceed
   }
 
   await mkdir(seedDir, { recursive: true })
@@ -33,7 +29,6 @@ export async function createSeed(options: SeedOptions, seedsDir: string): Promis
 slug: ${slug}
 title: ${title}
 status: active
-budget_usd: ${budgetUsd}
 created: ${new Date().toISOString().slice(0, 10)}
 ---
 
@@ -76,8 +71,7 @@ export async function listSeeds(seedsDir: string): Promise<SeedSummary[]> {
       const slug = extract(content, 'slug') ?? entry
       const title = extract(content, 'title') ?? entry
       const status = extract(content, 'status') ?? 'active'
-      const budgetUsd = parseFloat(extract(content, 'budget_usd') ?? '0')
-      seeds.push({ slug, title, status, budgetUsd })
+      seeds.push({ slug, title, status })
     } catch {
       // Not a seed directory, skip
     }

@@ -12,9 +12,7 @@
 ## Implemented
 - [x] File-based knowledge graph — Markdown files with YAML frontmatter in seeds/{seed-slug}/. Each node type has its own subdirectory. Wikilinks between nodes for edges. Per-seed _index.md as living summary. Obsidian-compatible out of the box. Git-native versioning.
 - [x] Pi extension infrastructure — Project-local pi extension at .pi/extensions/researcher/ that registers all research tools. TypeScript loaded by jiti (no build step). Deps declared in root package.json.
-- [x] Run management — start_run / complete_run tools track run lifecycle. Run files live at seeds/{slug}/runs/{run-id}.md.
-- [x] Token budget tracking and communication — Budget set per run, communicated to the model via /research prompt injection. Model instructed to call complete_run when done or near budget.
-- [x] Research agent core loop — /research <slug> [budget] command injects seed context + prior findings, registers all tools, and hands off to the model to research autonomously.
+- [x] Research agent core loop — /research <slug> command injects seed context + prior findings, registers all tools, and hands off to the model to research autonomously.
 - [x] Page reader tool — Jina Reader integration (r.jina.ai). Fetches any URL and returns clean markdown. Free, no API key required.
 - [x] Web search tool — Playwright/DuckDuckGo. Headless browser search, no API key or rate limits.
 - [x] Seeds management — create_seed, list_seeds tools. seed.md + _index.md per seed.
