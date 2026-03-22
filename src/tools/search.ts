@@ -30,37 +30,37 @@ export async function searchWeb(query: string, options: SearchOptions = {}): Pro
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
     })
 
-    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 })
     await page.waitForTimeout(2000)
 
-    const results = await page.$$eval('#b_results li.b_algo', (nodes) =>
-      nodes.map((node) => {
-        const anchor = node.querySelector('h2 a')
-        const title = anchor?.textContent?.trim() ?? ''
-        // Extract real URL from Bing's redirect URL via the cite element
-        const cite = node.querySelector('cite')?.textContent?.trim() ?? ''
-        const href = anchor?.getAttribute('href') ?? ''
-        return { title, url: href, snippet: node.querySelector('.b_caption p')?.textContent?.trim() ?? '', cite }
-      })
-    )
+    // Brave Search result selectors
+    const resultSelector = await Promise.race([
+      page.waitForSelector('[data-type="web"] .snippet', { timeout: 6000 }).then(() => '[data-type="web"] .snippet'),
+      page.waitForSelector('.snippet', { timeout: 6000 }).then(() => '.snippet'),
+      page.waitForSelector('article', { timeout: 6000 }).then(() => 'article'),
+    ]).catch(() => null)
 
-    // Resolve real URLs from Bing redirect links
-    const resolved: SearchResult[] = []
-    for (const r of results.slice(0, maxResults)) {
-      if (!r.title) continue
-      let url = r.url
-      // Try to extract real URL from Bing's encoded redirect
-      try {
-        const match = r.url.match(/[?&]u=a1([A-Za-z0-9+/=]+)/)
-        if (match) {
-          url = Buffer.from(match[1], 'base64').toString('utf-8')
-        }
-      } catch { /* keep original */ }
-      resolved.push({ title: r.title, url, snippet: r.snippet })
+    if (!resultSelector) {
+      return []
     }
 
-    return resolved
+    const results = await page.$$eval(resultSelector, (nodes) =>
+      nodes.map((node) => {
+        const titleEl = node.querySelector('a .title, .title a, h2 a, a[href]')
+        const snippetEl = node.querySelector('.snippet-description, p, .description')
+        const url = titleEl
+          ? (titleEl.closest('a') as HTMLAnchorElement)?.href ?? (titleEl as HTMLAnchorElement)?.href ?? ''
+          : ''
+        return {
+          title: titleEl?.textContent?.trim() ?? '',
+          url,
+          snippet: snippetEl?.textContent?.trim() ?? '',
+        }
+      }).filter(r => r.title && r.url && !r.url.includes('brave.com'))
+    )
+
+    return results.slice(0, maxResults)
   } finally {
     await browser.close()
   }

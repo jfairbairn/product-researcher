@@ -1,12 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock playwright so tests don't spin up a real browser
 vi.mock('playwright', () => {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(undefined),
-    fill: vi.fn().mockResolvedValue(undefined),
-    press: vi.fn().mockResolvedValue(undefined),
-    waitForSelector: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue({}),
     waitForTimeout: vi.fn().mockResolvedValue(undefined),
     addInitScript: vi.fn().mockResolvedValue(undefined),
     $$eval: vi.fn(),
@@ -21,29 +18,29 @@ vi.mock('playwright', () => {
     close: vi.fn().mockResolvedValue(undefined),
   }
   return {
-    chromium: {
-      launch: vi.fn().mockResolvedValue(mockBrowser),
-    },
+    chromium: { launch: vi.fn().mockResolvedValue(mockBrowser) },
     _mockPage: mockPage,
     _mockBrowser: mockBrowser,
   }
 })
 
+const { searchWeb } = await import('../../src/tools/search.ts')
+const playwright = await import('playwright')
+
 describe('searchWeb', () => {
   beforeEach(() => {
-    vi.resetModules()
+    vi.clearAllMocks()
+    // Reset waitForSelector to resolve by default
+    ;(playwright as any)._mockPage.waitForSelector.mockResolvedValue({})
   })
 
   it('returns an array of results with title, url and snippet', async () => {
-    const playwright = await import('playwright')
     const mockPage = (playwright as any)._mockPage
-
     mockPage.$$eval.mockResolvedValue([
-      { title: 'Result One', url: 'https://example.com/1', snippet: 'First result snippet', cite: '' },
-      { title: 'Result Two', url: 'https://example.com/2', snippet: 'Second result snippet', cite: '' },
+      { title: 'Result One', url: 'https://example.com/1', snippet: 'First result snippet' },
+      { title: 'Result Two', url: 'https://example.com/2', snippet: 'Second result snippet' },
     ])
 
-    const { searchWeb } = await import('../../src/tools/search.ts')
     const results = await searchWeb('test query')
 
     expect(results).toHaveLength(2)
@@ -54,55 +51,42 @@ describe('searchWeb', () => {
     })
   })
 
-  it('launches a headless browser', async () => {
-    const playwright = await import('playwright')
-    const mockPage = (playwright as any)._mockPage
-    mockPage.$$eval.mockResolvedValue([])
-
-    const { searchWeb } = await import('../../src/tools/search.ts')
+  it('launches a headless browser with anti-detection', async () => {
+    ;(playwright as any)._mockPage.$$eval.mockResolvedValue([])
     await searchWeb('test query')
-
-    expect(playwright.chromium.launch).toHaveBeenCalledWith(expect.objectContaining({ headless: true }))
+    expect(playwright.chromium.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ headless: true })
+    )
   })
 
   it('searches DuckDuckGo with the given query', async () => {
-    const playwright = await import('playwright')
-    const mockPage = (playwright as any)._mockPage
-    mockPage.$$eval.mockResolvedValue([])
-
-    const { searchWeb } = await import('../../src/tools/search.ts')
+    ;(playwright as any)._mockPage.$$eval.mockResolvedValue([])
     await searchWeb('my research query')
-
-    expect(mockPage.goto).toHaveBeenCalledWith(
-      expect.stringContaining('bing.com'),
+    expect((playwright as any)._mockPage.goto).toHaveBeenCalledWith(
+      expect.stringContaining('brave.com'),
       expect.anything(),
     )
   })
 
   it('closes the browser after searching', async () => {
-    const playwright = await import('playwright')
-    const mockPage = (playwright as any)._mockPage
-    const mockBrowser = (playwright as any)._mockBrowser
-    mockPage.$$eval.mockResolvedValue([])
-
-    const { searchWeb } = await import('../../src/tools/search.ts')
+    ;(playwright as any)._mockPage.$$eval.mockResolvedValue([])
     await searchWeb('test query')
-
-    expect(mockBrowser.close).toHaveBeenCalled()
+    expect((playwright as any)._mockBrowser.close).toHaveBeenCalled()
   })
 
   it('respects a maxResults option', async () => {
-    const playwright = await import('playwright')
-    const mockPage = (playwright as any)._mockPage
-    mockPage.$$eval.mockResolvedValue([
+    ;(playwright as any)._mockPage.$$eval.mockResolvedValue([
       { title: 'A', url: 'https://a.com', snippet: 'a' },
       { title: 'B', url: 'https://b.com', snippet: 'b' },
       { title: 'C', url: 'https://c.com', snippet: 'c' },
     ])
-
-    const { searchWeb } = await import('../../src/tools/search.ts')
     const results = await searchWeb('test query', { maxResults: 2 })
-
     expect(results).toHaveLength(2)
+  })
+
+  it('returns empty array if no results selector found', async () => {
+    ;(playwright as any)._mockPage.waitForSelector.mockRejectedValue(new Error('Timeout'))
+    const results = await searchWeb('test query')
+    expect(results).toEqual([])
   })
 })
