@@ -23,8 +23,13 @@ async function readPageWithPlaywright(url: string): Promise<string> {
   try {
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 720 },
+      locale: 'en-US',
     })
     const page = await context.newPage()
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+    })
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 })
     const html = await page.content()
     return htmlToText(html)

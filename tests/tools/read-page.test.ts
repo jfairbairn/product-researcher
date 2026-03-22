@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('playwright', () => {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(undefined),
+    addInitScript: vi.fn().mockResolvedValue(undefined),
     content: vi.fn().mockResolvedValue('<html><body><h1>Fallback Page</h1><p>Playwright content.</p></body></html>'),
     close: vi.fn().mockResolvedValue(undefined),
   }
