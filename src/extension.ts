@@ -1,11 +1,241 @@
 import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
+import { Type } from '@sinclair/typebox'
+import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+
+import { searchWeb } from './tools/search.ts'
+import { readPage } from './tools/read-page.ts'
+import { createSeed, listSeeds } from './tools/seeds.ts'
+import { createNode } from './tools/graph.ts'
+import { queryGraph } from './tools/graph.ts'
+import { startRun, completeRun } from './tools/budget.ts'
+
+const NODE_TYPES = ['observation', 'hypothesis', 'conjecture', 'pain_point', 'existing_solution', 'validation_strategy', 'product_plan'] as const
 
 export default function setup(pi: ExtensionAPI): void {
-  pi.on('session_start', async () => {
-    // researcher extension loaded
+  const seedsDir = join(process.cwd(), 'seeds')
+
+  // ── search_web ────────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'search_web',
+    label: 'Search Web',
+    description: 'Search the web via DuckDuckGo and return a list of results with title, URL, and snippet.',
+    parameters: Type.Object({
+      query: Type.String({ description: 'The search query' }),
+      maxResults: Type.Optional(Type.Number({ description: 'Max results to return (default 10)' })),
+    }),
+    async execute(_id, params) {
+      const results = await searchWeb(params.query, { maxResults: params.maxResults })
+      return {
+        content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+        details: {},
+      }
+    },
   })
 
-  pi.registerCommand('research', 'Run a research session against a seed', async () => {
-    // TODO: implement research command
+  // ── read_page ─────────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'read_page',
+    label: 'Read Page',
+    description: 'Fetch a URL and return its content as clean markdown via Jina Reader.',
+    parameters: Type.Object({
+      url: Type.String({ description: 'The URL to read' }),
+    }),
+    async execute(_id, params) {
+      const content = await readPage(params.url)
+      return {
+        content: [{ type: 'text', text: content }],
+        details: {},
+      }
+    },
+  })
+
+  // ── create_seed ───────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'create_seed',
+    label: 'Create Seed',
+    description: 'Create a new research seed with a slug, title, and budget.',
+    parameters: Type.Object({
+      slug: Type.String({ description: 'URL-safe identifier, e.g. ai-coding-tools' }),
+      title: Type.String({ description: 'Human-readable title' }),
+      budgetUsd: Type.Number({ description: 'Default research budget in USD' }),
+    }),
+    async execute(_id, params) {
+      await createSeed(params, seedsDir)
+      return {
+        content: [{ type: 'text', text: `Seed '${params.slug}' created.` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── list_seeds ────────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'list_seeds',
+    label: 'List Seeds',
+    description: 'List all research seeds with their status and budget.',
+    parameters: Type.Object({}),
+    async execute() {
+      const seeds = await listSeeds(seedsDir)
+      return {
+        content: [{ type: 'text', text: JSON.stringify(seeds, null, 2) }],
+        details: {},
+      }
+    },
+  })
+
+  // ── create_node ───────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'create_node',
+    label: 'Create Node',
+    description: 'Write a typed knowledge graph node (observation, hypothesis, etc.) for a seed.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      type: Type.Union(NODE_TYPES.map((t) => Type.Literal(t)), { description: 'Node type' }),
+      id: Type.String({ description: 'Unique node id, e.g. obs-001' }),
+      content: Type.String({ description: 'Body text of the node' }),
+      confidence: Type.Optional(Type.Number({ description: 'Confidence 0–1' })),
+      sourceUrl: Type.Optional(Type.String({ description: 'Source URL' })),
+      links: Type.Optional(Type.Array(
+        Type.Object({
+          relation: Type.String(),
+          target: Type.String({ description: 'Target node id' }),
+        }),
+        { description: 'Wikilink edges to other nodes' }
+      )),
+    }),
+    async execute(_id, params) {
+      await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+      return {
+        content: [{ type: 'text', text: `Node '${params.id}' created.` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── query_graph ───────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'query_graph',
+    label: 'Query Graph',
+    description: 'Read existing knowledge graph nodes for a seed, optionally filtered by type.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      type: Type.Optional(Type.String({ description: 'Filter by node type' })),
+    }),
+    async execute(_id, params) {
+      const nodes = await queryGraph(params, seedsDir)
+      return {
+        content: [{ type: 'text', text: JSON.stringify(nodes, null, 2) }],
+        details: {},
+      }
+    },
+  })
+
+  // ── start_run ─────────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'start_run',
+    label: 'Start Run',
+    description: 'Create a new research run record for a seed and return its run ID.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      budgetUsd: Type.Number({ description: 'Budget for this run in USD' }),
+    }),
+    async execute(_id, params) {
+      const { runId } = await startRun(params, seedsDir)
+      return {
+        content: [{ type: 'text', text: runId }],
+        details: { runId },
+      }
+    },
+  })
+
+  // ── complete_run ──────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'complete_run',
+    label: 'Complete Run',
+    description: 'Mark a research run as completed and record a summary.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      runId: Type.String({ description: 'Run ID returned by start_run' }),
+      summary: Type.String({ description: 'Brief summary of what was found this run' }),
+    }),
+    async execute(_id, params) {
+      await completeRun(params, seedsDir)
+      return {
+        content: [{ type: 'text', text: `Run '${params.runId}' completed.` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── /research command ─────────────────────────────────────────────────────
+  pi.registerCommand('research', {
+    description: 'Start a research session against a seed: /research <slug> [budget-usd]',
+    handler: async (args, ctx) => {
+      const parts = (args ?? '').trim().split(/\s+/)
+      const slug = parts[0]
+      const budgetUsd = parts[1] ? parseFloat(parts[1]) : undefined
+
+      if (!slug) {
+        ctx.ui.notify('Usage: /research <slug> [budget-usd]', 'error')
+        return
+      }
+
+      // Read seed context
+      let seedMd: string
+      let indexMd: string
+      try {
+        seedMd = await readFile(join(seedsDir, slug, 'seed.md'), 'utf-8')
+        indexMd = await readFile(join(seedsDir, slug, '_index.md'), 'utf-8')
+      } catch {
+        ctx.ui.notify(`Seed '${slug}' not found. Create it first with the create_seed tool.`, 'error')
+        return
+      }
+
+      // Extract default budget from seed.md if not overridden
+      const seedBudget = parseFloat(seedMd.match(/budget_usd:\s*([\d.]+)/)?.[1] ?? '1')
+      const budget = budgetUsd ?? seedBudget
+
+      // Start a run record
+      const { runId } = await startRun({ seed: slug, budgetUsd: budget }, seedsDir)
+
+      const prompt = `You are a product researcher. Your job is to research the seed idea below and build a knowledge graph of findings.
+
+## Seed
+
+${seedMd}
+
+## Prior Findings (from _index.md)
+
+${indexMd}
+
+## Your Run
+
+Run ID: ${runId}
+Budget: $${budget} USD
+
+## Instructions
+
+1. Call \`start_run\` is already done — your run ID is **${runId}**.
+2. Use \`search_web\` to find relevant pages. Use targeted queries.
+3. Use \`read_page\` to read promising pages in full.
+4. Use \`query_graph\` to check what nodes already exist before creating duplicates.
+5. Use \`create_node\` to record findings as typed nodes:
+   - \`observation\` — a concrete fact you found
+   - \`pain_point\` — a problem users face
+   - \`existing_solution\` — a competitor or workaround
+   - \`hypothesis\` — a testable belief
+   - \`conjecture\` — a speculative idea
+6. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`).
+7. When you are done or near your budget, update \`_index.md\` with a summary of key findings, open questions, and promising directions — then call \`complete_run\`.
+
+Stay focused. Prefer depth over breadth. Stop gracefully before exhausting your budget.`
+
+      pi.sendUserMessage(prompt)
+    },
+  })
+
+  pi.on('session_start', async () => {
+    // researcher extension loaded
   })
 }

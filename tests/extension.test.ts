@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
 
-// Minimal mock of the parts of ExtensionAPI the extension uses at init time
+vi.mock('playwright', () => ({
+  chromium: { launch: vi.fn().mockResolvedValue({ newContext: vi.fn(), close: vi.fn() }) },
+}))
+
 function makeMockPi() {
   return {
     on: vi.fn(),
     registerTool: vi.fn(),
     registerCommand: vi.fn(),
+    sendUserMessage: vi.fn(),
   } as unknown as ExtensionAPI
 }
 
@@ -15,7 +19,6 @@ describe('researcher extension', () => {
   let setup: (pi: ExtensionAPI) => void
 
   beforeEach(async () => {
-    // Re-import to reset module state between tests
     vi.resetModules()
     const mod = await import('../src/extension.ts')
     setup = mod.default
@@ -28,15 +31,32 @@ describe('researcher extension', () => {
 
   it('subscribes to session_start', () => {
     setup(pi)
-    const mock = pi.on as ReturnType<typeof vi.fn>
-    const events = mock.mock.calls.map((c: unknown[]) => c[0])
+    const events = (pi.on as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
     expect(events).toContain('session_start')
   })
 
   it('registers a /research command', () => {
     setup(pi)
-    const mock = pi.registerCommand as ReturnType<typeof vi.fn>
-    const names = mock.mock.calls.map((c: unknown[]) => c[0])
+    const names = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
     expect(names).toContain('research')
   })
+
+  const expectedTools = [
+    'search_web',
+    'read_page',
+    'create_seed',
+    'list_seeds',
+    'create_node',
+    'query_graph',
+    'start_run',
+    'complete_run',
+  ]
+
+  for (const tool of expectedTools) {
+    it(`registers the ${tool} tool`, () => {
+      setup(pi)
+      const names = (pi.registerTool as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].name)
+      expect(names).toContain(tool)
+    })
+  }
 })
