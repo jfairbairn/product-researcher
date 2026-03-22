@@ -7,6 +7,8 @@ vi.mock('playwright', () => {
     fill: vi.fn().mockResolvedValue(undefined),
     press: vi.fn().mockResolvedValue(undefined),
     waitForSelector: vi.fn().mockResolvedValue(undefined),
+    waitForTimeout: vi.fn().mockResolvedValue(undefined),
+    addInitScript: vi.fn().mockResolvedValue(undefined),
     $$eval: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined),
   }
@@ -37,8 +39,8 @@ describe('searchWeb', () => {
     const mockPage = (playwright as any)._mockPage
 
     mockPage.$$eval.mockResolvedValue([
-      { title: 'Result One', url: 'https://example.com/1', snippet: 'First result snippet' },
-      { title: 'Result Two', url: 'https://example.com/2', snippet: 'Second result snippet' },
+      { title: 'Result One', url: 'https://example.com/1', snippet: 'First result snippet', cite: '' },
+      { title: 'Result Two', url: 'https://example.com/2', snippet: 'Second result snippet', cite: '' },
     ])
 
     const { searchWeb } = await import('../../src/tools/search.ts')
@@ -60,7 +62,7 @@ describe('searchWeb', () => {
     const { searchWeb } = await import('../../src/tools/search.ts')
     await searchWeb('test query')
 
-    expect(playwright.chromium.launch).toHaveBeenCalledWith({ headless: true })
+    expect(playwright.chromium.launch).toHaveBeenCalledWith(expect.objectContaining({ headless: true }))
   })
 
   it('searches DuckDuckGo with the given query', async () => {
@@ -72,7 +74,7 @@ describe('searchWeb', () => {
     await searchWeb('my research query')
 
     expect(mockPage.goto).toHaveBeenCalledWith(
-      expect.stringContaining('duckduckgo.com'),
+      expect.stringContaining('bing.com'),
       expect.anything(),
     )
   })
