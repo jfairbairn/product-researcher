@@ -1,12 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-describe('readPage', () => {
-  beforeEach(() => {
-    vi.resetModules()
-  })
+vi.mock('playwright', () => {
+  const mockPage = {
+    goto: vi.fn().mockResolvedValue(undefined),
+    content: vi.fn().mockResolvedValue('<html><body><h1>Fallback Page</h1><p>Playwright content.</p></body></html>'),
+    close: vi.fn().mockResolvedValue(undefined),
+  }
+  const mockContext = {
+    newPage: vi.fn().mockResolvedValue(mockPage),
+    close: vi.fn().mockResolvedValue(undefined),
+  }
+  const mockBrowser = {
+    newContext: vi.fn().mockResolvedValue(mockContext),
+    close: vi.fn().mockResolvedValue(undefined),
+  }
+  return {
+    chromium: { launch: vi.fn().mockResolvedValue(mockBrowser) },
+    _mockPage: mockPage,
+    _mockBrowser: mockBrowser,
+  }
+})
 
+// Import once — no resetModules needed since playwright mock is module-level
+const { readPage } = await import('../../src/tools/read-page.ts')
+const playwright = await import('playwright')
+
+describe('readPage', () => {
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
   })
 
   it('fetches via Jina Reader and returns markdown content', async () => {
@@ -15,7 +37,6 @@ describe('readPage', () => {
       text: async () => '# Example Page\n\nSome content here.',
     }))
 
-    const { readPage } = await import('../../src/tools/read-page.ts')
     const result = await readPage('https://example.com')
 
     expect(result).toContain('Example Page')
@@ -29,7 +50,6 @@ describe('readPage', () => {
     })
     vi.stubGlobal('fetch', mockFetch)
 
-    const { readPage } = await import('../../src/tools/read-page.ts')
     await readPage('https://example.com/some/page')
 
     expect(mockFetch).toHaveBeenCalledWith(
@@ -38,14 +58,44 @@ describe('readPage', () => {
     )
   })
 
-  it('throws if the response is not ok', async () => {
+  it('falls back to Playwright when Jina returns 4xx', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
-      status: 429,
-      statusText: 'Too Many Requests',
+      status: 403,
+      statusText: 'Forbidden',
     }))
 
-    const { readPage } = await import('../../src/tools/read-page.ts')
-    await expect(readPage('https://example.com')).rejects.toThrow('429')
+    const result = await readPage('https://example.com')
+
+    expect(playwright.chromium.launch).toHaveBeenCalled()
+    expect((playwright as any)._mockPage.goto).toHaveBeenCalledWith(
+      'https://example.com',
+      expect.anything(),
+    )
+    expect(result).toContain('Fallback Page')
+  })
+
+  it('falls back to Playwright when Jina returns 5xx', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    }))
+
+    await readPage('https://example.com')
+
+    expect(playwright.chromium.launch).toHaveBeenCalled()
+  })
+
+  it('closes the Playwright browser after fallback', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 451,
+      statusText: 'Unavailable For Legal Reasons',
+    }))
+
+    await readPage('https://example.com')
+
+    expect((playwright as any)._mockBrowser.close).toHaveBeenCalled()
   })
 })
