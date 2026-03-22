@@ -9,12 +9,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.0",
-    "tavily": "^1.0.2"
+    "@jfairbairn/pi-bdd": "github:jfairbairn/pi-bdd",
+    "@sinclair/typebox": "^0.34.0"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "*",
     "@types/node": "^22.13.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"
   }
