@@ -245,3 +245,145 @@ Implementation: reads all _index.md files, asks the model to find non-obvious co
 7. Run BDD: npm test → red → implement → green
 8. Test manually: `/review console-llm-scalping hyp-016` should produce a well-formed assumption check
 
+
+---
+
+## Feature: Additional Node Types
+
+### Motivation
+
+The current seven node types (observation, hypothesis, conjecture, pain_point, existing_solution, validation_strategy, product_plan) leave gaps that have caused research quality issues across multiple seeds. Four additional types would address the most important gaps.
+
+---
+
+### `assumption`
+
+**What it is:** A premise that an hypothesis, conjecture, or product plan *depends on* being true, which has not itself been validated. Different from a hypothesis (a testable claim about the world) and a conjecture (a speculative idea). An assumption is something the plan silently requires.
+
+**Why it matters:** The most common research failure mode in these runs was unvalidated assumptions being treated as facts — "historical pattern = future constraint," fabricated cost economics presented as conclusions, efficiency extrapolations stated without measurement. Making assumptions explicit and typed is the single highest-impact change for research rigor.
+
+**Schema:**
+```yaml
+---
+id: asm-001
+type: assumption
+seed: console-llm-scalping
+created: 2026-03-22
+confidence: 0.50          # confidence that the assumption is correct
+risk: high                # high | medium | low — if wrong, what happens?
+links:
+  - underlies: "[[hyp-010]]"    # which node depends on this assumption
+  - would_invalidate: "[[pp-sony-002]]"
+---
+
+Body: Sony's 30% software take rate is the primary barrier to platform openness. 
+This assumes the take rate is structurally non-negotiable — that losing it would 
+destroy SIE's business model. Not validated against alternative revenue scenarios.
+```
+
+**Connection to review loop:** The assumption checker in ROADMAP.md's review loop would produce `assumption` nodes, not `review` nodes. This makes assumptions first-class rather than buried in review comments.
+
+---
+
+### `persona`
+
+**What it is:** A defined buyer or user segment with structured characteristics. Currently personas get distributed across pain_point nodes and product_plan prose, making them hard to reference, compare, or validate.
+
+**Why it matters:** As seeds move to product planning, the buyer definition is load-bearing. A typed persona enables: "which seeds share the same ICP?", "what pain points does this persona have across seeds?", "has this persona been validated by real user research?"
+
+**Schema:**
+```yaml
+---
+id: persona-001
+type: persona
+seed: ai-subscription-audit
+created: 2026-03-22
+confidence: 0.80
+links:
+  - experiences: "[[pp-001]]"     # pain points this persona has
+  - addressed_by: "[[plan-final]]"
+---
+
+## Individual Developer: Power AI Subscriber
+
+**Job:** Software developer or technical knowledge worker
+**Stack:** Claude Pro + Cursor Pro + ChatGPT Plus + Perplexity (~$90-109/month)
+**Pain:** Paying for AI subscriptions that partially replace each other; unclear which to keep
+**Motivation:** Reduce bill without losing capability; understands local AI but hasn't committed
+**WTP:** Would pay $0 for a calculator; would pay $599-1,200 for hardware with 15-month payback
+**Where they are:** r/LocalLLaMA, HN, r/ChatGPT
+**Validated by:** obs-021, obs-022 (HN testimonials), obs-004 (658k r/LocalLLaMA members)
+```
+
+---
+
+### `risk`
+
+**What it is:** A specific thing that could go wrong, with assessed probability and severity. Currently risks live in product_plan prose and are invisible to the review loop.
+
+**Why it matters:** Making risks typed nodes allows: querying "top risks across all seeds", targeting the product plan adversary review at specific risks, tracking whether risks have been mitigated over time.
+
+**Schema:**
+```yaml
+---
+id: risk-001
+type: risk
+seed: open-audio-platform
+created: 2026-03-22
+probability: 0.40         # 0-1
+severity: high            # critical | high | medium | low
+status: open              # open | mitigated | accepted | closed
+links:
+  - threatens: "[[pp-003]]"
+  - mitigated_by: "[[val-001]]"
+---
+
+USB audio latency exceeds ≤2ms target at 64 samples @ 48kHz. USB protocol overhead 
+(~1-2ms) makes this target unreachable without I2S carrier board. If USB-only MVP 
+ships and latency is unacceptable to live performers, early reviews will damage 
+platform credibility before the production I2S path is ready.
+
+Mitigation: Prototype before campaign. jack_delay benchmark on N100 + USB interface 
+for $200. If >4ms, ship with "studio/practice use" positioning only; delay live 
+performance claims to I2S carrier production release.
+```
+
+---
+
+### `market_signal`
+
+**What it is:** A piece of evidence about market dynamics — leading indicators, community size, growth rates, competitor moves — that has a different epistemic character from a factual observation. Not confirmed facts about the product opportunity, but signals that the opportunity may be real.
+
+**Why it matters:** Currently market signals get lumped into observations, diluting the confidence calibration. A QuitGPT signup count and a confirmed hardware spec are both obs nodes but should be treated very differently.
+
+**Schema:**
+```yaml
+---
+id: sig-001
+type: market_signal
+seed: ai-subscription-audit
+created: 2026-03-22
+confidence: 0.75          # confidence in the signal's validity
+signal_type: community_growth | pricing_change | competitor_move | adoption_data
+links:
+  - supports: "[[hyp-011]]"
+---
+
+r/LocalLLaMA: 658,000 members as of March 2026, +330,000 in prior year (100% annual 
+growth). Primary community for local LLM users. Direct audience for the calculator.
+Source: reddit.com/r/LocalLLaMA, March 2026.
+```
+
+---
+
+### Implementation Order
+
+1. Add `assumption`, `persona`, `risk`, `market_signal` to `NODE_TYPES` array in `src/extension.ts`
+2. Update `create_node` tool description to include the four new types with one-line descriptions
+3. Update `/research` command prompt to include the four new types in the instructions
+4. Write tests for the new types in `tests/tools/graph.test.ts` (BDD: red → green)
+5. Run `npm test` — should pass for all new types with no production code changes (they're just string literals in the union)
+
+The new types require no schema changes beyond the existing frontmatter — `confidence`, `links`, `source_url` all apply. The `risk` type benefits from two additional optional fields (`probability`, `severity`) and `market_signal` benefits from `signal_type`, but these are optional and can be added as free-form content initially.
+
+**Priority:** `assumption` first (highest research quality impact, directly enables the review loop), then `persona` (enables better product plan cross-referencing), then `risk` and `market_signal` as time allows.
