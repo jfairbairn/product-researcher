@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { searchWeb } from './tools/search.ts'
 import { readPage } from './tools/read-page.ts'
 import { createSeed, listSeeds } from './tools/seeds.ts'
-import { createNode, queryGraph } from './tools/graph.ts'
+import { createNode, queryGraph, createReview, queryReviews } from './tools/graph.ts'
 
 const NODE_TYPES = [
   'observation',
@@ -164,6 +164,53 @@ export default function setup(pi: ExtensionAPI): void {
     },
   })
 
+  // ── create_review ─────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'create_review',
+    label: 'Create Review',
+    description: 'Write a review of an existing node — assumption check, counterpoint, logic check, or failure mode analysis.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      target: Type.String({ description: 'Node id being reviewed, e.g. hyp-005' }),
+      reviewType: Type.Union(
+        ['assumption', 'counterpoint', 'logic', 'failure_mode'].map((t) => Type.Literal(t)),
+        { description: 'Kind of review: assumption | counterpoint | logic | failure_mode' }
+      ),
+      verdict: Type.Union(
+        ['approved', 'challenged', 'blocked'].map((v) => Type.Literal(v)),
+        { description: 'Outcome: approved | challenged | blocked' }
+      ),
+      content: Type.String({ description: 'Review body text' }),
+      confidenceAdjustment: Type.Optional(Type.Number({ description: 'Suggested delta to target confidence, e.g. -0.15' })),
+    }),
+    async execute(_id, params) {
+      await createReview(params as Parameters<typeof createReview>[0], seedsDir)
+      return {
+        content: [{ type: 'text', text: `Review of '${params.target}' created.` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── query_reviews ─────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'query_reviews',
+    label: 'Query Reviews',
+    description: 'Read reviews for a seed. Optionally filter by target node id or verdict.',
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      target: Type.Optional(Type.String({ description: 'Filter to reviews of a specific node, e.g. hyp-005' })),
+      verdict: Type.Optional(Type.String({ description: 'Filter by verdict: approved | challenged | blocked' })),
+    }),
+    async execute(_id, params) {
+      const reviews = await queryReviews(params, seedsDir)
+      return {
+        content: [{ type: 'text', text: JSON.stringify(reviews, null, 2) }],
+        details: {},
+      }
+    },
+  })
+
   // ── /research command ─────────────────────────────────────────────────────
   pi.registerCommand('research', {
     description: 'Start a research session against a seed: /research <slug>',
@@ -216,6 +263,90 @@ ${indexMd}
 6. When you are satisfied with the depth of research, update \`_index.md\` with a summary of key findings, open questions, and promising directions.
 
 Stay focused. Prefer depth over breadth.`
+
+      pi.sendUserMessage(prompt)
+    },
+  })
+
+  // ── /review command ───────────────────────────────────────────────────────
+  pi.registerCommand('review', {
+    description: 'Run a review pass on unreviewed nodes in a seed: /review <slug> [node-id] [--role assumption|counterpoint|logic|failure_mode]',
+    handler: async (args, ctx) => {
+      const parts = (args ?? '').trim().split(/\s+/)
+      const slug = parts[0]
+
+      if (!slug) {
+        ctx.ui.notify('Usage: /review <slug> [node-id] [--role assumption|counterpoint|logic|failure_mode]', 'error')
+        return
+      }
+
+      // Parse optional node-id and --role flag
+      let nodeId: string | undefined
+      let role: string | undefined
+      for (let i = 1; i < parts.length; i++) {
+        if (parts[i] === '--role' && parts[i + 1]) {
+          role = parts[++i]
+        } else if (!parts[i].startsWith('--')) {
+          nodeId = parts[i]
+        }
+      }
+
+      let seedMd: string
+      let indexMd: string
+      try {
+        seedMd = await readFile(join(seedsDir, slug, 'seed.md'), 'utf-8')
+        indexMd = await readFile(join(seedsDir, slug, '_index.md'), 'utf-8')
+      } catch {
+        ctx.ui.notify(`Seed '${slug}' not found.`, 'error')
+        return
+      }
+
+      const targetClause = nodeId
+        ? `Focus your review on node \`${nodeId}\` only.`
+        : `Review all unreviewed hypothesis, conjecture, and product_plan nodes.`
+
+      const roleInstructions: Record<string, string> = {
+        assumption: `You are a rigorous assumption checker. Identify every assumption embedded in the claim and ask: what would have to be true for this assumption to be wrong? For each assumption, determine whether it has been validated by the research or is simply asserted. Flag unvalidated assumptions as challenged. Use reviewType: "assumption".`,
+        counterpoint: `You are a devil's advocate. Produce the strongest possible case against the hypothesis — not a weak objection, but the most uncomfortable version of the counter-argument. If the counterpoint is strong enough to materially reduce confidence, set verdict: "challenged". If you cannot construct a compelling counterpoint, set verdict: "approved". Use reviewType: "counterpoint".`,
+        logic: `You are a logic checker. Identify the explicit inference chain: what premises lead to the conclusion? Is the conclusion deductively valid from the premises, or is there a gap? Are there confounds — alternative explanations for the same evidence? Use reviewType: "logic".`,
+        failure_mode: `You are a product plan adversary. Find the fastest path to failure: (1) What does the customer say no to, and why? (2) What assumption, if wrong, kills the business? (3) What does the competitive response look like in 12 months? (4) What does this look like at 10x scale? Use reviewType: "failure_mode".`,
+      }
+
+      const rolePrompt = role && roleInstructions[role]
+        ? roleInstructions[role]
+        : `Select the most appropriate review role for each node:
+- hypothesis or conjecture with confidence > 0.65: use "assumption" and "counterpoint" reviews
+- hypothesis or conjecture with confidence ≤ 0.65: use "assumption" review
+- product_plan: use "failure_mode" review
+- conjecture with explicit inference chain: use "logic" review`
+
+      const prompt = `You are a research reviewer. Your job is to challenge the research findings for the seed below, not rubber-stamp them.
+
+## Seed
+
+${seedMd}
+
+## Prior Findings (from _index.md)
+
+${indexMd}
+
+## Your Role
+
+${rolePrompt}
+
+## Instructions
+
+1. Use \`query_graph\` to read the nodes you need to review.
+2. Use \`query_reviews\` to check which nodes already have reviews — do not duplicate.
+3. ${targetClause}
+4. For each node you review, call \`create_review\` with:
+   - \`target\`: the node id being reviewed
+   - \`reviewType\`: assumption | counterpoint | logic | failure_mode
+   - \`verdict\`: approved | challenged | blocked
+   - \`confidenceAdjustment\`: suggested delta if verdict is challenged or blocked (e.g. -0.15)
+   - \`content\`: your detailed review explaining the challenge or approval
+5. Be rigorous. A review that approves everything is useless. A review that blocks everything is also useless.
+6. After all reviews are written, summarise what you challenged and why.`
 
       pi.sendUserMessage(prompt)
     },

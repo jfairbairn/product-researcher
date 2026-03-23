@@ -48,6 +48,8 @@ describe('researcher extension', () => {
     'list_seeds',
     'create_node',
     'query_graph',
+    'create_review',
+    'query_reviews',
   ]
 
   for (const tool of expectedTools) {
@@ -57,4 +59,10 @@ describe('researcher extension', () => {
       expect(names).toContain(tool)
     })
   }
+
+  it('registers a /review command', () => {
+    setup(pi)
+    const names = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
+    expect(names).toContain('review')
+  })
 })

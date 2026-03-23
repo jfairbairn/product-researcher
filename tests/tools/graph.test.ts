@@ -185,3 +185,159 @@ describe('queryGraph', () => {
     expect(nodes[0]).toMatchObject({ id: 'obs-001', type: 'observation', content: 'Test content.' })
   })
 })
+
+describe('createReview', () => {
+  it('writes a review file at seeds/{seed}/reviews/{target}-{review_type}-{n}.md', async () => {
+    const { createReview } = await import('../../src/tools/graph.ts')
+    await createReview(
+      {
+        seed: 'my-seed',
+        target: 'hyp-005',
+        reviewType: 'assumption',
+        verdict: 'challenged',
+        content: 'The efficiency assumption is unvalidated.',
+      },
+      tmpDir
+    )
+
+    const { readdir } = await import('node:fs/promises')
+    const files = await readdir(join(tmpDir, 'my-seed', 'reviews'))
+    expect(files).toHaveLength(1)
+    expect(files[0]).toMatch(/^hyp-005-assumption-\d+\.md$/)
+  })
+
+  it('writes YAML frontmatter with id, type, seed, target, review_type, verdict, and created', async () => {
+    const { createReview } = await import('../../src/tools/graph.ts')
+    await createReview(
+      {
+        seed: 'my-seed',
+        target: 'hyp-005',
+        reviewType: 'assumption',
+        verdict: 'challenged',
+        content: 'Body text.',
+      },
+      tmpDir
+    )
+
+    const { readdir, readFile: rf } = await import('node:fs/promises')
+    const files = await readdir(join(tmpDir, 'my-seed', 'reviews'))
+    const raw = await rf(join(tmpDir, 'my-seed', 'reviews', files[0]), 'utf-8')
+
+    expect(raw).toMatch(/type:\s*review/)
+    expect(raw).toMatch(/target:\s*hyp-005/)
+    expect(raw).toMatch(/review_type:\s*assumption/)
+    expect(raw).toMatch(/verdict:\s*challenged/)
+    expect(raw).toMatch(/created:\s*\d{4}-\d{2}-\d{2}/)
+    expect(raw).toContain('Body text.')
+  })
+
+  it('includes optional confidence_adjustment when provided', async () => {
+    const { createReview } = await import('../../src/tools/graph.ts')
+    await createReview(
+      {
+        seed: 'my-seed',
+        target: 'hyp-005',
+        reviewType: 'logic',
+        verdict: 'challenged',
+        confidenceAdjustment: -0.15,
+        content: 'Logic gap found.',
+      },
+      tmpDir
+    )
+
+    const { readdir, readFile: rf } = await import('node:fs/promises')
+    const files = await readdir(join(tmpDir, 'my-seed', 'reviews'))
+    const raw = await rf(join(tmpDir, 'my-seed', 'reviews', files[0]), 'utf-8')
+
+    expect(raw).toMatch(/confidence_adjustment:\s*-0\.15/)
+  })
+
+  it('auto-increments the review number when multiple reviews exist for the same target and type', async () => {
+    const { createReview } = await import('../../src/tools/graph.ts')
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-005', reviewType: 'assumption', verdict: 'approved', content: 'First.' },
+      tmpDir
+    )
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-005', reviewType: 'assumption', verdict: 'challenged', content: 'Second.' },
+      tmpDir
+    )
+
+    const { readdir } = await import('node:fs/promises')
+    const files = await readdir(join(tmpDir, 'my-seed', 'reviews'))
+    expect(files).toHaveLength(2)
+    expect(files.some((f) => f.includes('-1.md'))).toBe(true)
+    expect(files.some((f) => f.includes('-2.md'))).toBe(true)
+  })
+})
+
+describe('queryReviews', () => {
+  it('returns an empty array when no reviews exist', async () => {
+    const { queryReviews } = await import('../../src/tools/graph.ts')
+    const reviews = await queryReviews({ seed: 'my-seed' }, tmpDir)
+    expect(reviews).toEqual([])
+  })
+
+  it('returns all reviews for a seed', async () => {
+    const { createReview, queryReviews } = await import('../../src/tools/graph.ts')
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-001', reviewType: 'assumption', verdict: 'approved', content: 'A' },
+      tmpDir
+    )
+    await createReview(
+      { seed: 'my-seed', target: 'con-001', reviewType: 'logic', verdict: 'challenged', content: 'B' },
+      tmpDir
+    )
+
+    const reviews = await queryReviews({ seed: 'my-seed' }, tmpDir)
+    expect(reviews).toHaveLength(2)
+  })
+
+  it('filters reviews by target node id', async () => {
+    const { createReview, queryReviews } = await import('../../src/tools/graph.ts')
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-001', reviewType: 'assumption', verdict: 'approved', content: 'A' },
+      tmpDir
+    )
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-002', reviewType: 'counterpoint', verdict: 'challenged', content: 'B' },
+      tmpDir
+    )
+
+    const reviews = await queryReviews({ seed: 'my-seed', target: 'hyp-001' }, tmpDir)
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0].target).toBe('hyp-001')
+  })
+
+  it('filters reviews by verdict', async () => {
+    const { createReview, queryReviews } = await import('../../src/tools/graph.ts')
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-001', reviewType: 'assumption', verdict: 'approved', content: 'A' },
+      tmpDir
+    )
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-002', reviewType: 'counterpoint', verdict: 'challenged', content: 'B' },
+      tmpDir
+    )
+
+    const reviews = await queryReviews({ seed: 'my-seed', verdict: 'challenged' }, tmpDir)
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0].verdict).toBe('challenged')
+  })
+
+  it('returns review nodes with id, target, reviewType, verdict, and content fields', async () => {
+    const { createReview, queryReviews } = await import('../../src/tools/graph.ts')
+    await createReview(
+      { seed: 'my-seed', target: 'hyp-001', reviewType: 'failure_mode', verdict: 'blocked', content: 'Plan fails.' },
+      tmpDir
+    )
+
+    const reviews = await queryReviews({ seed: 'my-seed' }, tmpDir)
+    expect(reviews[0]).toMatchObject({
+      target: 'hyp-001',
+      reviewType: 'failure_mode',
+      verdict: 'blocked',
+      content: 'Plan fails.',
+    })
+  })
+})

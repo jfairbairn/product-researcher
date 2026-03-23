@@ -89,6 +89,122 @@ export async function createNode(options: CreateNodeOptions, seedsDir: string): 
   await writeFile(nodeFile, `${frontmatter}\n\n${content}\n`, 'utf-8')
 }
 
+export type ReviewType = 'assumption' | 'counterpoint' | 'logic' | 'failure_mode'
+export type ReviewVerdict = 'approved' | 'challenged' | 'blocked'
+
+export interface CreateReviewOptions {
+  seed: string
+  target: string
+  reviewType: ReviewType
+  verdict: ReviewVerdict
+  content: string
+  confidenceAdjustment?: number
+}
+
+export interface ReviewNode {
+  id: string
+  seed: string
+  target: string
+  reviewType: ReviewType
+  verdict: ReviewVerdict
+  content: string
+  confidenceAdjustment?: number
+}
+
+export interface QueryReviewsOptions {
+  seed: string
+  target?: string
+  verdict?: string
+}
+
+export async function createReview(options: CreateReviewOptions, seedsDir: string): Promise<void> {
+  const { seed, target, reviewType, verdict, content, confidenceAdjustment } = options
+  const reviewDir = join(seedsDir, seed, 'reviews')
+  await mkdir(reviewDir, { recursive: true })
+
+  // Find the next available sequence number for this target+type combination
+  let existing: string[] = []
+  try {
+    existing = await readdir(reviewDir)
+  } catch {
+    // directory just created, no files yet
+  }
+  const prefix = `${target}-${reviewType}-`
+  const n = existing.filter((f) => f.startsWith(prefix)).length + 1
+  const id = `rev-${target}-${reviewType}-${n}`
+  const fileName = `${target}-${reviewType}-${n}.md`
+  const nodeFile = join(reviewDir, fileName)
+
+  const frontmatter = [
+    '---',
+    `id: ${id}`,
+    `type: review`,
+    `seed: ${seed}`,
+    `target: ${target}`,
+    `review_type: ${reviewType}`,
+    `verdict: ${verdict}`,
+    `created: ${new Date().toISOString().slice(0, 10)}`,
+    confidenceAdjustment !== undefined ? `confidence_adjustment: ${confidenceAdjustment}` : null,
+    '---',
+  ]
+    .filter((l) => l !== null)
+    .join('\n')
+
+  await writeFile(nodeFile, `${frontmatter}\n\n${content}\n`, 'utf-8')
+}
+
+export async function queryReviews(options: QueryReviewsOptions, seedsDir: string): Promise<ReviewNode[]> {
+  const { seed, target, verdict } = options
+  const reviewDir = join(seedsDir, seed, 'reviews')
+
+  let files: string[]
+  try {
+    files = await readdir(reviewDir)
+  } catch {
+    return []
+  }
+
+  const reviews: ReviewNode[] = []
+
+  for (const file of files) {
+    if (!file.endsWith('.md')) continue
+    try {
+      const raw = await readFile(join(reviewDir, file), 'utf-8')
+      const node = parseReview(raw)
+      if (!node) continue
+      if (target && node.target !== target) continue
+      if (verdict && node.verdict !== verdict) continue
+      reviews.push(node)
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  return reviews
+}
+
+function parseReview(raw: string): ReviewNode | null {
+  const match = raw.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/)
+  if (!match) return null
+
+  const fm = match[1]
+  const content = match[2].trim()
+
+  const get = (key: string) => fm.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))?.[1]?.trim()
+
+  const id = get('id')
+  const seed = get('seed')
+  const target = get('target')
+  const reviewType = get('review_type') as ReviewType | undefined
+  const verdict = get('verdict') as ReviewVerdict | undefined
+  if (!id || !seed || !target || !reviewType || !verdict) return null
+
+  const adj = get('confidence_adjustment')
+  const confidenceAdjustment = adj ? parseFloat(adj) : undefined
+
+  return { id, seed, target, reviewType, verdict, content, ...(confidenceAdjustment !== undefined && { confidenceAdjustment }) }
+}
+
 export async function queryGraph(options: QueryGraphOptions, seedsDir: string): Promise<GraphNode[]> {
   const { seed, type } = options
   const seedDir = join(seedsDir, seed)
