@@ -9,6 +9,10 @@ export type NodeType =
   | 'existing_solution'
   | 'validation_strategy'
   | 'product_plan'
+  | 'assumption'
+  | 'persona'
+  | 'risk'
+  | 'market_signal'
 
 export interface NodeLink {
   relation: string
@@ -23,6 +27,12 @@ export interface CreateNodeOptions {
   confidence?: number
   sourceUrl?: string
   links?: NodeLink[]
+  // risk-specific
+  probability?: number
+  severity?: 'critical' | 'high' | 'medium' | 'low'
+  status?: 'open' | 'mitigated' | 'accepted' | 'closed'
+  // market_signal-specific
+  signalType?: string
 }
 
 export interface GraphNode {
@@ -40,7 +50,7 @@ export interface QueryGraphOptions {
 }
 
 export async function createNode(options: CreateNodeOptions, seedsDir: string): Promise<void> {
-  const { seed, type, id, content, confidence, sourceUrl, links } = options
+  const { seed, type, id, content, confidence, sourceUrl, links, probability, severity, status, signalType } = options
   const nodeDir = join(seedsDir, seed, type)
   const nodeFile = join(nodeDir, `${id}.md`)
 
@@ -65,6 +75,10 @@ export async function createNode(options: CreateNodeOptions, seedsDir: string): 
     `seed: ${seed}`,
     `created: ${new Date().toISOString().slice(0, 10)}`,
     confidence !== undefined ? `confidence: ${confidence}` : null,
+    probability !== undefined ? `probability: ${probability}` : null,
+    severity ? `severity: ${severity}` : null,
+    status ? `status: ${status}` : null,
+    signalType ? `signal_type: ${signalType}` : null,
     sourceUrl ? `source_url: ${sourceUrl}` : null,
     linkLines ? linkLines.trimEnd() : null,
     '---',

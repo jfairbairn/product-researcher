@@ -8,7 +8,19 @@ import { readPage } from './tools/read-page.ts'
 import { createSeed, listSeeds } from './tools/seeds.ts'
 import { createNode, queryGraph } from './tools/graph.ts'
 
-const NODE_TYPES = ['observation', 'hypothesis', 'conjecture', 'pain_point', 'existing_solution', 'validation_strategy', 'product_plan'] as const
+const NODE_TYPES = [
+  'observation',
+  'hypothesis',
+  'conjecture',
+  'pain_point',
+  'existing_solution',
+  'validation_strategy',
+  'product_plan',
+  'assumption',
+  'persona',
+  'risk',
+  'market_signal',
+] as const
 
 export default function setup(pi: ExtensionAPI): void {
   const seedsDir = join(process.cwd(), 'seeds')
@@ -85,7 +97,18 @@ export default function setup(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'create_node',
     label: 'Create Node',
-    description: 'Write a typed knowledge graph node (observation, hypothesis, etc.) for a seed.',
+    description: `Write a typed knowledge graph node for a seed. Types:
+- observation — a concrete fact found during research
+- pain_point — a problem users face
+- existing_solution — a competitor or workaround
+- hypothesis — a testable belief about the opportunity
+- conjecture — a speculative idea worth exploring
+- validation_strategy — a way to test a hypothesis
+- product_plan — a product or business direction
+- assumption — an unvalidated premise a node depends on being true
+- persona — a defined buyer or user segment with characteristics and WTP
+- risk — a specific thing that could go wrong, with probability and severity
+- market_signal — a leading indicator (community size, growth rate, competitor move)`,
     parameters: Type.Object({
       seed: Type.String({ description: 'Seed slug' }),
       type: Type.Union(NODE_TYPES.map((t) => Type.Literal(t)), { description: 'Node type' }),
@@ -99,6 +122,19 @@ export default function setup(pi: ExtensionAPI): void {
           target: Type.String({ description: 'Target node id' }),
         }),
         { description: 'Wikilink edges to other nodes' }
+      )),
+      probability: Type.Optional(Type.Number({ description: '(risk) Probability 0–1 that this risk materialises' })),
+      severity: Type.Optional(Type.Union(
+        ['critical', 'high', 'medium', 'low'].map((s) => Type.Literal(s)),
+        { description: '(risk) Impact severity if the risk materialises' }
+      )),
+      status: Type.Optional(Type.Union(
+        ['open', 'mitigated', 'accepted', 'closed'].map((s) => Type.Literal(s)),
+        { description: '(risk) Current status' }
+      )),
+      signalType: Type.Optional(Type.Union(
+        ['community_growth', 'pricing_change', 'competitor_move', 'adoption_data'].map((s) => Type.Literal(s)),
+        { description: '(market_signal) Category of signal' }
       )),
     }),
     async execute(_id, params) {
@@ -170,7 +206,13 @@ ${indexMd}
    - \`existing_solution\` — a competitor or workaround
    - \`hypothesis\` — a testable belief
    - \`conjecture\` — a speculative idea
-5. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`).
+   - \`validation_strategy\` — how to test a hypothesis
+   - \`product_plan\` — a product or business direction
+   - \`assumption\` — an unvalidated premise a node *depends on* being true (make these explicit!)
+   - \`persona\` — a defined buyer/user segment with job, pain, WTP, and where they are
+   - \`risk\` — a specific thing that could go wrong; use \`probability\`, \`severity\`, \`status\` fields
+   - \`market_signal\` — a leading indicator such as community growth, pricing change, or competitor move; use \`signalType\` field
+5. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`, \`underlies\`, \`threatens\`).
 6. When you are satisfied with the depth of research, update \`_index.md\` with a summary of key findings, open questions, and promising directions.
 
 Stay focused. Prefer depth over breadth.`
