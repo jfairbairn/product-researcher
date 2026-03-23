@@ -97,13 +97,13 @@ pi
 
 ### 1. Create a seed
 
-Use the `create_seed` tool in your pi conversation:
-
 ```
-Create a seed for "AI subscription cost optimisation tools" with slug ai-subscription-audit
+/seed ai-subscription-audit
 ```
 
-This creates `seeds/ai-subscription-audit/seed.md` and an empty `_index.md`.
+This runs a brief interview — title, core hypothesis, prior knowledge, target buyer, known competitors, open questions — and writes a populated `_index.md` before the first research run. Any question you leave blank is omitted.
+
+You can also pass the slug as an argument (`/seed my-slug`) and pi will ask for the title and interview answers interactively.
 
 ### 2. Run a research session
 
