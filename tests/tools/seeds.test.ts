@@ -41,6 +41,19 @@ describe('createSeed', () => {
     expect(content).toContain('My Seed')
   })
 
+  it('uses initialIndex content for _index.md when provided', async () => {
+    const { createSeed } = await import('../../src/tools/seeds.ts')
+    await createSeed(
+      { slug: 'my-seed', title: 'My Seed', initialIndex: '# Custom Index\n\nMy prior knowledge.' },
+      tmpDir
+    )
+
+    const content = await readFile(join(tmpDir, 'my-seed', '_index.md'), 'utf-8')
+    expect(content).toContain('Custom Index')
+    expect(content).toContain('My prior knowledge.')
+    expect(content).not.toContain('Nothing yet')
+  })
+
   it('throws if a seed with that slug already exists', async () => {
     const { createSeed } = await import('../../src/tools/seeds.ts')
     await createSeed({ slug: 'dupe', title: 'Dupe' }, tmpDir)

@@ -211,6 +211,78 @@ export default function setup(pi: ExtensionAPI): void {
     },
   })
 
+  // ── /seed command ─────────────────────────────────────────────────────────
+  pi.registerCommand('seed', {
+    description: 'Create a new research seed with a guided interview: /seed [slug]',
+    handler: async (args, ctx) => {
+      const askSlug = !(args ?? '').trim()
+      let slug = (args ?? '').trim()
+
+      if (askSlug) {
+        const input = await ctx.ui.input('Seed slug (url-safe, e.g. ai-coding-tools):', '')
+        if (!input?.trim()) {
+          ctx.ui.notify('Cancelled.', 'info')
+          return
+        }
+        slug = input.trim()
+      }
+
+      const titleInput = await ctx.ui.input('Title (human-readable):', '')
+      if (!titleInput?.trim()) {
+        ctx.ui.notify('Cancelled.', 'info')
+        return
+      }
+      const title = titleInput.trim()
+
+      ctx.ui.notify('A few quick questions to capture what you already know. Leave any blank to skip.', 'info')
+
+      const hypothesis = await ctx.ui.input('Core hypothesis or opportunity (1–2 sentences):', '')
+      const priorKnowledge = await ctx.ui.input('What do you already know? (context, constraints, prior research):', '')
+      const buyer = await ctx.ui.input('Target buyer or user:', '')
+      const competitors = await ctx.ui.input('Known competitors or existing solutions:', '')
+      const openQuestions = await ctx.ui.input('Most important questions you want answered:', '')
+
+      // Build _index.md from interview answers
+      const sections: string[] = [`# ${title}`, '']
+
+      if (hypothesis?.trim()) {
+        sections.push('## Core Hypothesis', '', hypothesis.trim(), '')
+      }
+
+      if (priorKnowledge?.trim()) {
+        sections.push('## Prior Knowledge', '', priorKnowledge.trim(), '')
+      }
+
+      if (buyer?.trim()) {
+        sections.push('## Target Buyer', '', buyer.trim(), '')
+      }
+
+      if (competitors?.trim()) {
+        sections.push('## Known Landscape', '', competitors.trim(), '')
+      }
+
+      sections.push('## Open Questions', '')
+      if (openQuestions?.trim()) {
+        sections.push(openQuestions.trim(), '')
+      } else {
+        sections.push('_Nothing yet._', '')
+      }
+
+      sections.push('## Key Findings', '', '_Nothing yet — run `/research ' + slug + '` to begin._', '')
+      sections.push('## Promising Directions', '', '_Nothing yet._', '')
+
+      const initialIndex = sections.join('\n')
+
+      try {
+        await createSeed({ slug, title, initialIndex }, seedsDir)
+        ctx.ui.notify(`Seed '${slug}' created. Run /research ${slug} to begin.`, 'info')
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        ctx.ui.notify(msg, 'error')
+      }
+    },
+  })
+
   // ── /research command ─────────────────────────────────────────────────────
   pi.registerCommand('research', {
     description: 'Start a research session against a seed: /research <slug>',

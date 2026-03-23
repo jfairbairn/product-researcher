@@ -65,4 +65,10 @@ describe('researcher extension', () => {
     const names = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
     expect(names).toContain('review')
   })
+
+  it('registers a /seed command', () => {
+    setup(pi)
+    const names = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
+    expect(names).toContain('seed')
+  })
 })

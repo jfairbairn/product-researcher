@@ -4,6 +4,7 @@ import { join } from 'node:path'
 export interface SeedOptions {
   slug: string
   title: string
+  initialIndex?: string
 }
 
 export interface SeedSummary {
@@ -13,7 +14,7 @@ export interface SeedSummary {
 }
 
 export async function createSeed(options: SeedOptions, seedsDir: string): Promise<void> {
-  const { slug, title } = options
+  const { slug, title, initialIndex } = options
   const seedDir = join(seedsDir, slug)
 
   try {
@@ -35,7 +36,7 @@ created: ${new Date().toISOString().slice(0, 10)}
 # ${title}
 `
 
-  const indexMd = `# ${title}
+  const indexMd = initialIndex ?? `# ${title}
 
 ## Key Findings
 
