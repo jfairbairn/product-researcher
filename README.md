@@ -1,6 +1,6 @@
 # product-researcher
 
-An autonomous product research agent that runs inside [pi](https://shittycodingagent.ai). Give it a seed idea — a market question, a trend, a product hypothesis — and it searches the web, reads pages, and builds a structured knowledge graph of findings. A separate review loop challenges the research with adversarial agents before conclusions harden.
+An autonomous product research agent that runs inside [pi](https://pi.dev). Give it a seed idea — a market question, a trend, a product hypothesis — and it searches the web, reads pages, and builds a structured knowledge graph of findings. A separate review loop challenges the research with adversarial agents before conclusions harden.
 
 All state lives as readable markdown files in `seeds/`. No database, no server, no build step.
 
