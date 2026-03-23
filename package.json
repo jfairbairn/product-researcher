@@ -1,18 +1,21 @@
 {
-  "name": "product-researcher",
+  "name": "@jfairbairn/product-researcher",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": [".pi/extensions/researcher"]
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@jfairbairn/pi-bdd": "github:jfairbairn/pi-bdd",
-    "@sinclair/typebox": "^0.34.0"
+  "peerDependencies": {
+    "@sinclair/typebox": "*"
   },
   "devDependencies": {
+    "@jfairbairn/pi-bdd": "github:jfairbairn/pi-bdd",
     "@mariozechner/pi-coding-agent": "*",
     "@types/node": "^22.13.0",
     "playwright": "^1.58.2",
