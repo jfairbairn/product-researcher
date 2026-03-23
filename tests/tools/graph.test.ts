@@ -39,6 +39,28 @@ describe('createNode', () => {
     expect(content).toMatch(/created:\s*\d{4}-\d{2}-\d{2}/)
   })
 
+  it('writes title to frontmatter when provided', async () => {
+    const { createNode } = await import('../../src/tools/graph.ts')
+    await createNode(
+      { seed: 'my-seed', type: 'observation', id: 'obs-001', content: 'People hate onboarding flows.', title: 'Users abandon onboarding flows at high rates' },
+      tmpDir
+    )
+
+    const content = await readFile(join(tmpDir, 'my-seed', 'observation', 'obs-001.md'), 'utf-8')
+    expect(content).toMatch(/title:\s*Users abandon onboarding flows at high rates/)
+  })
+
+  it('omits title from frontmatter when not provided', async () => {
+    const { createNode } = await import('../../src/tools/graph.ts')
+    await createNode(
+      { seed: 'my-seed', type: 'observation', id: 'obs-001', content: 'No title here.' },
+      tmpDir
+    )
+
+    const content = await readFile(join(tmpDir, 'my-seed', 'observation', 'obs-001.md'), 'utf-8')
+    expect(content).not.toMatch(/^title:/m)
+  })
+
   it('includes optional confidence and source_url when provided', async () => {
     const { createNode } = await import('../../src/tools/graph.ts')
     await createNode(

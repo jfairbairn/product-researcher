@@ -23,6 +23,7 @@ export interface CreateNodeOptions {
   seed: string
   type: NodeType
   id: string
+  title?: string
   content: string
   confidence?: number
   sourceUrl?: string
@@ -39,6 +40,7 @@ export interface GraphNode {
   id: string
   type: string
   seed: string
+  title?: string
   content: string
   confidence?: number
   sourceUrl?: string
@@ -50,7 +52,7 @@ export interface QueryGraphOptions {
 }
 
 export async function createNode(options: CreateNodeOptions, seedsDir: string): Promise<void> {
-  const { seed, type, id, content, confidence, sourceUrl, links, probability, severity, status, signalType } = options
+  const { seed, type, id, title, content, confidence, sourceUrl, links, probability, severity, status, signalType } = options
   const nodeDir = join(seedsDir, seed, type)
   const nodeFile = join(nodeDir, `${id}.md`)
 
@@ -71,6 +73,7 @@ export async function createNode(options: CreateNodeOptions, seedsDir: string): 
   const frontmatter = [
     '---',
     `id: ${id}`,
+    title ? `title: ${title}` : null,
     `type: ${type}`,
     `seed: ${seed}`,
     `created: ${new Date().toISOString().slice(0, 10)}`,
@@ -257,8 +260,9 @@ function parseNode(raw: string): GraphNode | null {
   const seed = get('seed')
   if (!id || !type || !seed) return null
 
+  const title = get('title')
   const confidence = get('confidence') ? parseFloat(get('confidence')!) : undefined
   const sourceUrl = get('source_url')
 
-  return { id, type, seed, content, ...(confidence !== undefined && { confidence }), ...(sourceUrl && { sourceUrl }) }
+  return { id, type, seed, ...(title && { title }), content, ...(confidence !== undefined && { confidence }), ...(sourceUrl && { sourceUrl }) }
 }

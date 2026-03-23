@@ -51,7 +51,8 @@ async function collectFiles(seedsDir) {
     .map(d => path.join(seedsDir, d.name));
 
   const nodeDirs = ['observation', 'hypothesis', 'conjecture', 'pain_point',
-                    'existing_solution', 'validation_strategy', 'product_plan'];
+                    'existing_solution', 'validation_strategy', 'product_plan',
+                    'assumption', 'persona', 'risk', 'market_signal'];
 
   for (const seed of seedDirs) {
     for (const nodeDir of nodeDirs) {

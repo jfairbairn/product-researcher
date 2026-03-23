@@ -113,6 +113,7 @@ export default function setup(pi: ExtensionAPI): void {
       seed: Type.String({ description: 'Seed slug' }),
       type: Type.Union(NODE_TYPES.map((t) => Type.Literal(t)), { description: 'Node type' }),
       id: Type.String({ description: 'Unique node id, e.g. obs-001' }),
+      title: Type.Optional(Type.String({ description: 'Pithy one-line title for the node (max ~12 words)' })),
       content: Type.String({ description: 'Body text of the node' }),
       confidence: Type.Optional(Type.Number({ description: 'Confidence 0–1' })),
       sourceUrl: Type.Optional(Type.String({ description: 'Source URL' })),
@@ -319,7 +320,7 @@ ${indexMd}
 1. Use \`search_web\` to find relevant pages. Use targeted queries.
 2. Use \`read_page\` to read promising pages in full.
 3. Use \`query_graph\` to check what nodes already exist before creating duplicates.
-4. Use \`create_node\` to record findings as typed nodes:
+4. Use \`create_node\` to record findings as typed nodes. Always include a \`title\` — a pithy one-line summary of the node's single most important claim (max 12 words, active voice, specific not generic):
    - \`observation\` — a concrete fact you found
    - \`pain_point\` — a problem users face
    - \`existing_solution\` — a competitor or workaround
