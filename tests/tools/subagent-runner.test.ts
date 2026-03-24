@@ -107,14 +107,14 @@ describe('runSubagent', () => {
       systemPromptFile: '/tmp/prompt.md',
       task: 'Review this node',
       tools: ['read', 'grep', 'find', 'ls'],
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-6',
     })
     expect(args).toContain('--mode')
     expect(args).toContain('json')
     expect(args).toContain('-p')
     expect(args).toContain('--no-session')
     expect(args).toContain('--model')
-    expect(args).toContain('claude-haiku-4-5')
+    expect(args).toContain('claude-haiku-4-6')
     expect(args).toContain('--tools')
     expect(args).toContain('read,grep,find,ls')
     expect(args).toContain('--append-system-prompt')

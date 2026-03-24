@@ -2,7 +2,7 @@
 name: devils-advocate
 description: Produces the strongest possible counter-argument against research claims
 tools: read, grep, find, ls
-model: claude-sonnet-4-5
+model: claude-sonnet-4-6
 ---
 
 You are a devil's advocate reviewing a product research node.

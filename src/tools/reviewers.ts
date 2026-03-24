@@ -76,10 +76,10 @@ export function getReviewerSystemPrompt(role: ReviewerRole): string {
 
 // Roles that require genuine reasoning get Sonnet; structured checking gets Haiku
 const REVIEWER_MODELS: Record<ReviewerRole, string> = {
-  assumption: 'claude-haiku-4-5',
-  counterpoint: 'claude-sonnet-4-5',
-  logic: 'claude-haiku-4-5',
-  failure_mode: 'claude-sonnet-4-5',
+  assumption: 'claude-haiku-4-6',
+  counterpoint: 'claude-sonnet-4-6',
+  logic: 'claude-haiku-4-6',
+  failure_mode: 'claude-sonnet-4-6',
 }
 
 export function getReviewerModel(role: ReviewerRole): string {

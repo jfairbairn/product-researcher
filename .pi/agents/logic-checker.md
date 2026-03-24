@@ -2,7 +2,7 @@
 name: logic-checker
 description: Validates inference chains and identifies logical gaps
 tools: read, grep, find, ls
-model: claude-haiku-4-5
+model: claude-haiku-4-6
 ---
 
 You are a logic checker reviewing a product research node.

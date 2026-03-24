@@ -150,8 +150,8 @@ describe('runReviewRound', () => {
     const models = Object.values(modelsUsed)
     expect(models).toHaveLength(4)
     // Should have a mix — not all haiku
-    expect(models.filter(m => m === 'claude-sonnet-4-5').length).toBeGreaterThan(0)
-    expect(models.filter(m => m === 'claude-haiku-4-5').length).toBeGreaterThan(0)
+    expect(models.filter(m => m === 'claude-sonnet-4-6').length).toBeGreaterThan(0)
+    expect(models.filter(m => m === 'claude-haiku-4-6').length).toBeGreaterThan(0)
   })
 
   it('runs all four reviewers for product_plan', async () => {
