@@ -154,7 +154,7 @@ export default function setup(pi: ExtensionAPI): void {
     label: 'Review and Create Node',
     description: `Submit a draft node for parallel review by specialist subagents. Each reviewer has its own context and evaluates the node independently. Returns reviewer feedback and scores.
 
-If the RMS score across all reviewers is ≥ 0.8, the node is presented to the user for final approval. The user can Save, Revise (with feedback), or Discard. If the user revises, rewrite the node addressing their feedback and call this tool again. If the RMS score is < 0.8, rewrite the node addressing the reviewer feedback and call this tool again.
+If the RMS score across all reviewers is ≥ 0.8, the node is presented to the user for final approval. The user can Save, Revise (with feedback), or Discard. If the user revises, rewrite the node addressing their feedback and call this tool again. If the RMS score is < 0.8, the node is still presented to the user — the user decides whether the reviewer critique is substantive enough to warrant revision. Do NOT automatically rewrite in a loop; let the user judge.
 
 Reviewers dispatched per type:
 - observation, pain_point, persona, market_signal → assumption checker
@@ -205,18 +205,7 @@ Reviewers dispatched per type:
           ).join('\n\n')
         : ''
 
-      // ── Review failed — return feedback for rewriting (no user prompt) ──
-      if (!result.passed) {
-        return {
-          content: [{
-            type: 'text',
-            text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
-          }],
-          details: {},
-        }
-      }
-
-      // ── Review passed (or skipped) — ask the user ──
+      // ── Always present to user — RMS score is informational, not a hard gate ──
       const nodePreview = [
         `**${params.id}** (${params.type})`,
         params.title ? `*${params.title}*` : null,
@@ -225,13 +214,14 @@ Reviewers dispatched per type:
         params.content,
       ].filter(l => l !== null).join('\n')
 
+      const passedLabel = result.passed ? '✓ PASSED' : '✗ BELOW THRESHOLD'
       const reviewSummary = result.feedback.length > 0
-        ? `\n\n── Reviewer scores (RMS: ${result.rmsScore.toFixed(2)}) ──\n${result.feedback.map(f => `  ${f.role}: ${f.score.toFixed(2)}`).join('\n')}`
+        ? `\n\n── Reviewer scores (RMS: ${result.rmsScore.toFixed(2)} ${passedLabel}) ──\n${result.feedback.map(f => `  ${f.role}: ${f.score.toFixed(2)}`).join('\n')}`
         : ' (no review needed)'
 
       if (ctx?.hasUI) {
         const choice = await ctx.ui.select(
-          `Node ready to save${reviewSummary}\n\n${nodePreview}`,
+          `Node for review${reviewSummary}\n\n${nodePreview}`,
           ['Save', 'Revise — I have feedback', 'Discard — move on']
         )
 
@@ -270,12 +260,22 @@ Reviewers dispatched per type:
         }
       }
 
-      // ── No UI (print mode, RPC, etc.) — save automatically ──
-      await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+      // ── No UI (print mode, RPC, etc.) — auto-save if passed, return feedback if not ──
+      if (result.passed) {
+        await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+        return {
+          content: [{
+            type: 'text',
+            text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved (auto-approved, no UI).\n\n${feedbackText}`
+          }],
+          details: {},
+        }
+      }
+
       return {
         content: [{
           type: 'text',
-          text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved (auto-approved, no UI).\n\n${feedbackText}`
+          text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
         }],
         details: {},
       }
