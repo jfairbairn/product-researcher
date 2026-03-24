@@ -97,16 +97,11 @@ describe('getReviewerModel', () => {
     }
   })
 
-  it('defaults to claude-sonnet-4-6 for counterpoint and failure_mode', async () => {
+  it('uses claude-sonnet-4-6 for all reviewer roles', async () => {
     const { getReviewerModel } = await import('../../src/tools/reviewers.ts')
-    expect(getReviewerModel('counterpoint')).toBe('claude-sonnet-4-6')
-    expect(getReviewerModel('failure_mode')).toBe('claude-sonnet-4-6')
-  })
-
-  it('uses claude-haiku-4-6 for assumption and logic by default', async () => {
-    const { getReviewerModel } = await import('../../src/tools/reviewers.ts')
-    expect(getReviewerModel('assumption')).toBe('claude-haiku-4-6')
-    expect(getReviewerModel('logic')).toBe('claude-haiku-4-6')
+    for (const role of ['assumption', 'counterpoint', 'logic', 'failure_mode'] as const) {
+      expect(getReviewerModel(role)).toBe('claude-sonnet-4-6')
+    }
   })
 })
 

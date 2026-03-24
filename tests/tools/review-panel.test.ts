@@ -117,7 +117,7 @@ describe('runReviewRound', () => {
     }
   })
 
-  it('uses role-specific models (Sonnet for counterpoint/failure_mode, Haiku for others)', async () => {
+  it('uses claude-sonnet-4-6 for all reviewer roles', async () => {
     const { runReviewRound } = await import('../../src/tools/review-panel.ts')
     const modelsUsed: Record<string, string> = {}
 
@@ -149,9 +149,8 @@ describe('runReviewRound', () => {
 
     const models = Object.values(modelsUsed)
     expect(models).toHaveLength(4)
-    // Should have a mix — not all haiku
-    expect(models.filter(m => m === 'claude-sonnet-4-6').length).toBeGreaterThan(0)
-    expect(models.filter(m => m === 'claude-haiku-4-6').length).toBeGreaterThan(0)
+    // All reviewers should use sonnet 4.6
+    expect(models.every(m => m === 'claude-sonnet-4-6')).toBe(true)
   })
 
   it('runs all four reviewers for product_plan', async () => {

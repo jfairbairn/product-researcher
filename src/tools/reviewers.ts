@@ -74,11 +74,11 @@ export function getReviewerSystemPrompt(role: ReviewerRole): string {
   return REVIEWER_PROMPTS[role]
 }
 
-// Roles that require genuine reasoning get Sonnet; structured checking gets Haiku
+// All reviewers use Sonnet for maximum rigour
 const REVIEWER_MODELS: Record<ReviewerRole, string> = {
-  assumption: 'claude-haiku-4-6',
+  assumption: 'claude-sonnet-4-6',
   counterpoint: 'claude-sonnet-4-6',
-  logic: 'claude-haiku-4-6',
+  logic: 'claude-sonnet-4-6',
   failure_mode: 'claude-sonnet-4-6',
 }
 
