@@ -403,22 +403,24 @@ ${indexMd}
 1. Use \`search_web\` to find relevant pages. Use targeted queries.
 2. Use \`read_page\` to read promising pages in full.
 3. Use \`query_graph\` to check what nodes already exist before creating duplicates.
-4. Use \`create_node\` to record findings as typed nodes. Always include a \`title\` — a pithy one-line summary of the node's single most important claim (max 12 words, active voice, specific not generic):
-   - \`observation\` — a concrete fact you found
-   - \`pain_point\` — a problem users face
-   - \`existing_solution\` — a competitor or workaround
+4. Use \`review_and_create_node\` for nodes that involve interpretation or judgment. This submits the node for parallel review by specialist subagents (assumption checker, devil's advocate, logic checker, failure mode analyst). Each reviewer independently evaluates the node with its own context. If the review panel returns a score below 0.8, **rewrite the node addressing the specific feedback**, then call \`review_and_create_node\` again. Use this for:
    - \`hypothesis\` — a testable belief
    - \`conjecture\` — a speculative idea
-   - \`validation_strategy\` — how to test a hypothesis
    - \`product_plan\` — a product or business direction
    - \`assumption\` — an unvalidated premise a node *depends on* being true (make these explicit!)
    - \`persona\` — a defined buyer/user segment with job, pain, WTP, and where they are
+   - \`observation\` — a concrete fact you found (gets light assumption-checking)
+   - \`pain_point\` — a problem users face
    - \`risk\` — a specific thing that could go wrong; use \`probability\`, \`severity\`, \`status\` fields
    - \`market_signal\` — a leading indicator such as community growth, pricing change, or competitor move; use \`signalType\` field
-5. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`, \`underlies\`, \`threatens\`).
-6. When you are satisfied with the depth of research, update \`_index.md\` with a summary of key findings, open questions, and promising directions.
+   - \`validation_strategy\` — how to test a hypothesis
+5. Use \`create_node\` (bypassing review) only for purely factual recordings where no interpretation is involved:
+   - \`existing_solution\` — a competitor or workaround (factual, no review needed)
+6. Always include a \`title\` — a pithy one-line summary of the node's single most important claim (max 12 words, active voice, specific not generic).
+7. Link nodes to each other using the \`links\` field (e.g. \`supports\`, \`informs\`, \`contradicts\`, \`underlies\`, \`threatens\`).
+8. When you are satisfied with the depth of research, update \`_index.md\` with a summary of key findings, open questions, and promising directions.
 
-Stay focused. Prefer depth over breadth.`
+Stay focused. Prefer depth over breadth. When a reviewer challenges your node, take the feedback seriously — don't just add a disclaimer, genuinely reconsider the claim.`
 
       pi.sendUserMessage(prompt)
     },
