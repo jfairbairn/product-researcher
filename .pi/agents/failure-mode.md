@@ -2,7 +2,7 @@
 name: failure-mode
 description: Finds the fastest path to failure for product plans
 tools: read, grep, find, ls
-model: claude-haiku-4-5
+model: claude-sonnet-4-5
 ---
 
 You are a product plan adversary reviewing a product research node.

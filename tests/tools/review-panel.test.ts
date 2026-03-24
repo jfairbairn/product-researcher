@@ -117,6 +117,43 @@ describe('runReviewRound', () => {
     }
   })
 
+  it('uses role-specific models (Sonnet for counterpoint/failure_mode, Haiku for others)', async () => {
+    const { runReviewRound } = await import('../../src/tools/review-panel.ts')
+    const modelsUsed: Record<string, string> = {}
+
+    // We can detect the model from the system prompt file content + task
+    // But more directly: capture what runSubagent receives via the spawner
+    // The spawner receives the pi args which include --model
+    const spawner = async (_cmd: string, args: string[]) => {
+      const modelIdx = args.indexOf('--model')
+      const model = modelIdx >= 0 ? args[modelIdx + 1] : 'unknown'
+      // Extract role from the task text (the last arg contains the reviewer task)
+      const task = args[args.length - 1]
+      // The system prompt file distinguishes roles, but we can track by call order
+      // For product_plan: assumption, counterpoint, logic, failure_mode
+      const callNum = Object.keys(modelsUsed).length
+      modelsUsed[`call-${callNum}`] = model
+
+      const event = JSON.stringify({
+        type: 'message_end',
+        message: { role: 'assistant', content: [{ type: 'text', text: '{"score": 0.9, "feedback": "ok"}' }] }
+      })
+      return { stdout: event + '\n', stderr: '', exitCode: 0 }
+    }
+
+    await runReviewRound(
+      { ...draftNode, type: 'product_plan' },
+      seedContext,
+      { spawner }
+    )
+
+    const models = Object.values(modelsUsed)
+    expect(models).toHaveLength(4)
+    // Should have a mix — not all haiku
+    expect(models.filter(m => m === 'claude-sonnet-4-5').length).toBeGreaterThan(0)
+    expect(models.filter(m => m === 'claude-haiku-4-5').length).toBeGreaterThan(0)
+  })
+
   it('runs all four reviewers for product_plan', async () => {
     const { runReviewRound } = await import('../../src/tools/review-panel.ts')
 

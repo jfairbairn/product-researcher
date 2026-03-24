@@ -1,4 +1,4 @@
-import { getReviewersForNodeType, buildReviewerTask, getReviewerSystemPrompt } from './reviewers.ts'
+import { getReviewersForNodeType, buildReviewerTask, getReviewerSystemPrompt, getReviewerModel } from './reviewers.ts'
 import { runSubagent, parseReviewerOutput } from './subagent-runner.ts'
 import { createNode } from './graph.ts'
 import type { DraftNode, ReviewerRole } from './reviewers.ts'
@@ -52,7 +52,7 @@ export async function runReviewRound(
           systemPrompt,
           task,
           tools: ['read', 'grep', 'find', 'ls'],
-          model: 'claude-haiku-4-5',
+          model: getReviewerModel(role),
           cwd: options.cwd,
           signal: options.signal,
           spawner: options.spawner,

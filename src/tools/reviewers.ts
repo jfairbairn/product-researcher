@@ -74,6 +74,18 @@ export function getReviewerSystemPrompt(role: ReviewerRole): string {
   return REVIEWER_PROMPTS[role]
 }
 
+// Roles that require genuine reasoning get Sonnet; structured checking gets Haiku
+const REVIEWER_MODELS: Record<ReviewerRole, string> = {
+  assumption: 'claude-haiku-4-5',
+  counterpoint: 'claude-sonnet-4-5',
+  logic: 'claude-haiku-4-5',
+  failure_mode: 'claude-sonnet-4-5',
+}
+
+export function getReviewerModel(role: ReviewerRole): string {
+  return REVIEWER_MODELS[role]
+}
+
 export function buildReviewerTask(role: ReviewerRole, draft: DraftNode, seedContext: string): string {
   const linksSection = draft.links && draft.links.length > 0
     ? `\nLinked nodes:\n${draft.links.map(l => `  - ${l.relation}: ${l.target}`).join('\n')}`

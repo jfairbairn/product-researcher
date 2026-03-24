@@ -88,6 +88,28 @@ describe('getReviewerSystemPrompt', () => {
   })
 })
 
+describe('getReviewerModel', () => {
+  it('returns a default model for each role', async () => {
+    const { getReviewerModel } = await import('../../src/tools/reviewers.ts')
+    for (const role of ['assumption', 'counterpoint', 'logic', 'failure_mode'] as const) {
+      expect(typeof getReviewerModel(role)).toBe('string')
+      expect(getReviewerModel(role).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('defaults to claude-sonnet-4-5 for counterpoint and failure_mode', async () => {
+    const { getReviewerModel } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerModel('counterpoint')).toBe('claude-sonnet-4-5')
+    expect(getReviewerModel('failure_mode')).toBe('claude-sonnet-4-5')
+  })
+
+  it('uses claude-haiku-4-5 for assumption and logic by default', async () => {
+    const { getReviewerModel } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerModel('assumption')).toBe('claude-haiku-4-5')
+    expect(getReviewerModel('logic')).toBe('claude-haiku-4-5')
+  })
+})
+
 describe('buildReviewerTask', () => {
   const draftNode = {
     seed: 'test-seed',
