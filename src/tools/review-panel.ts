@@ -31,6 +31,7 @@ export interface ReviewRoundOptions {
   signal?: AbortSignal
   cwd?: string
   spawner?: Spawner
+  maxRounds?: number
 }
 
 export async function runReviewRound(

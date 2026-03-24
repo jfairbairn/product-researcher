@@ -58,6 +58,36 @@ describe('getReviewersForNodeType', () => {
   })
 })
 
+describe('getReviewerSystemPrompt', () => {
+  it('returns a non-empty prompt for each reviewer role', async () => {
+    const { getReviewerSystemPrompt } = await import('../../src/tools/reviewers.ts')
+    for (const role of ['assumption', 'counterpoint', 'logic', 'failure_mode'] as const) {
+      const prompt = getReviewerSystemPrompt(role)
+      expect(prompt.length).toBeGreaterThan(50)
+    }
+  })
+
+  it('assumption prompt mentions assumptions', async () => {
+    const { getReviewerSystemPrompt } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerSystemPrompt('assumption')).toContain('assumption')
+  })
+
+  it('counterpoint prompt mentions counter-argument', async () => {
+    const { getReviewerSystemPrompt } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerSystemPrompt('counterpoint')).toContain('counter-argument')
+  })
+
+  it('logic prompt mentions inference chain', async () => {
+    const { getReviewerSystemPrompt } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerSystemPrompt('logic')).toContain('inference chain')
+  })
+
+  it('failure_mode prompt mentions failure', async () => {
+    const { getReviewerSystemPrompt } = await import('../../src/tools/reviewers.ts')
+    expect(getReviewerSystemPrompt('failure_mode')).toContain('failure')
+  })
+})
+
 describe('buildReviewerTask', () => {
   const draftNode = {
     seed: 'test-seed',

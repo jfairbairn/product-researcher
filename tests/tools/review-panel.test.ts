@@ -224,4 +224,16 @@ describe('reviewAndCreateNode', () => {
       expect(f).toHaveProperty('feedback')
     }
   })
+
+  it('uses a max of 3 review rounds to prevent infinite loops', async () => {
+    // This tests that reviewAndCreateNode with maxRounds option caps iterations
+    const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
+    const result = await reviewAndCreateNode(baseDraft, tmpDir, {
+      spawner: makeSpawner(0.3, 'Bad.'),
+      maxRounds: 1,
+    })
+
+    // With maxRounds=1, it should fail after one round without saving
+    expect(result.passed).toBe(false)
+  })
 })
