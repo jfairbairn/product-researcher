@@ -1,8 +1,6 @@
 import { getReviewersForNodeType, buildReviewerTask, getReviewerSystemPrompt, getReviewerModel } from './reviewers.ts'
 import { runSubagent, parseReviewerOutput } from './subagent-runner.ts'
-import { createNode } from './graph.ts'
 import type { DraftNode, ReviewerRole } from './reviewers.ts'
-import type { CreateNodeOptions } from './graph.ts'
 import type { Spawner } from './subagent-runner.ts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -90,9 +88,8 @@ export async function reviewAndCreateNode(
 ): Promise<ReviewPanelResult> {
   const roles = getReviewersForNodeType(draft.type)
 
-  // No reviewers needed — save directly
+  // No reviewers needed — pass directly (caller is responsible for saving)
   if (roles.length === 0) {
-    await createNode(draft as unknown as CreateNodeOptions, seedsDir)
     return { passed: true, rmsScore: 1.0, feedback: [] }
   }
 
@@ -109,7 +106,6 @@ export async function reviewAndCreateNode(
   const rmsScore = calculateRmsScore(feedback.map(f => f.score))
 
   if (rmsScore >= RMS_THRESHOLD) {
-    await createNode(draft as unknown as CreateNodeOptions, seedsDir)
     return { passed: true, rmsScore, feedback }
   }
 

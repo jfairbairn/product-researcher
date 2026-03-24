@@ -154,7 +154,7 @@ export default function setup(pi: ExtensionAPI): void {
     label: 'Review and Create Node',
     description: `Submit a draft node for parallel review by specialist subagents. Each reviewer has its own context and evaluates the node independently. Returns reviewer feedback and scores.
 
-If the RMS score across all reviewers is ≥ 0.8, the node is saved automatically. If not, rewrite the node addressing the feedback and call this tool again with the revised content.
+If the RMS score across all reviewers is ≥ 0.8, the node is presented to the user for final approval. The user can Save, Revise (with feedback), or Discard. If the user revises, rewrite the node addressing their feedback and call this tool again. If the RMS score is < 0.8, rewrite the node addressing the reviewer feedback and call this tool again.
 
 Reviewers dispatched per type:
 - observation, pain_point, persona, market_signal → assumption checker
@@ -192,38 +192,90 @@ Reviewers dispatched per type:
         { description: '(market_signal) Category of signal' }
       )),
     }),
-    async execute(_id, params, signal) {
+    async execute(_id, params, signal, _onUpdate, ctx) {
       const result = await reviewAndCreateNode(
         params as Parameters<typeof reviewAndCreateNode>[0],
         seedsDir,
         { signal, cwd: process.cwd() }
       )
 
-      if (result.passed && result.feedback.length === 0) {
-        return {
-          content: [{ type: 'text', text: `Node '${params.id}' saved (no review needed for ${params.type}).` }],
-          details: {},
-        }
-      }
+      const feedbackText = result.feedback.length > 0
+        ? result.feedback.map(f =>
+            `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
+          ).join('\n\n')
+        : ''
 
-      const feedbackText = result.feedback.map(f =>
-        `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
-      ).join('\n\n')
-
-      if (result.passed) {
+      // ── Review failed — return feedback for rewriting (no user prompt) ──
+      if (!result.passed) {
         return {
           content: [{
             type: 'text',
-            text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved.\n\n${feedbackText}`
+            text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
           }],
           details: {},
         }
       }
 
+      // ── Review passed (or skipped) — ask the user ──
+      const nodePreview = [
+        `**${params.id}** (${params.type})`,
+        params.title ? `*${params.title}*` : null,
+        params.confidence !== undefined ? `Confidence: ${params.confidence}` : null,
+        '',
+        params.content,
+      ].filter(l => l !== null).join('\n')
+
+      const reviewSummary = result.feedback.length > 0
+        ? `\n\n── Reviewer scores (RMS: ${result.rmsScore.toFixed(2)}) ──\n${result.feedback.map(f => `  ${f.role}: ${f.score.toFixed(2)}`).join('\n')}`
+        : ' (no review needed)'
+
+      if (ctx?.hasUI) {
+        const choice = await ctx.ui.select(
+          `Node ready to save${reviewSummary}\n\n${nodePreview}`,
+          ['Save', 'Revise — I have feedback', 'Discard — move on']
+        )
+
+        if (choice === 'Save') {
+          await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+          return {
+            content: [{
+              type: 'text',
+              text: `Node '${params.id}' approved by user and saved.\n\n${feedbackText}`
+            }],
+            details: {},
+          }
+        }
+
+        if (choice === 'Revise — I have feedback') {
+          const userFeedback = await ctx.ui.input('What should be changed?', '')
+          const feedbackMsg = userFeedback?.trim()
+            ? `The user wants changes: ${userFeedback.trim()}`
+            : 'The user wants changes but did not specify what. Ask them.'
+          return {
+            content: [{
+              type: 'text',
+              text: `Node '${params.id}' was NOT approved by the user. ${feedbackMsg}\n\nRewrite the node addressing the user's feedback, then call review_and_create_node again.\n\n${feedbackText}`
+            }],
+            details: {},
+          }
+        }
+
+        // Discard or cancelled
+        return {
+          content: [{
+            type: 'text',
+            text: `Node '${params.id}' discarded by user. Move on to the next finding.`
+          }],
+          details: {},
+        }
+      }
+
+      // ── No UI (print mode, RPC, etc.) — save automatically ──
+      await createNode(params as Parameters<typeof createNode>[0], seedsDir)
       return {
         content: [{
           type: 'text',
-          text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
+          text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved (auto-approved, no UI).\n\n${feedbackText}`
         }],
         details: {},
       }

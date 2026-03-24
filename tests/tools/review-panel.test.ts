@@ -208,16 +208,16 @@ describe('reviewAndCreateNode', () => {
     }
   }
 
-  it('saves node when RMS score >= 0.8', async () => {
+  it('does not save node to disk when review passes (caller is responsible for saving)', async () => {
     const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
     const result = await reviewAndCreateNode(baseDraft, tmpDir, { spawner: makeSpawner(0.9, 'Good.') })
 
     expect(result.passed).toBe(true)
     expect(result.rmsScore).toBeGreaterThanOrEqual(0.8)
 
-    // Node should be written to disk
-    const content = await readFile(join(tmpDir, 'test-seed', 'hypothesis', 'hyp-001.md'), 'utf-8')
-    expect(content).toContain('Users with high AI spend prefer local inference.')
+    // Node should NOT be on disk — caller decides whether to save
+    const { access } = await import('node:fs/promises')
+    await expect(access(join(tmpDir, 'test-seed', 'hypothesis', 'hyp-001.md'))).rejects.toThrow()
   })
 
   it('returns feedback without saving when RMS score < 0.8', async () => {
@@ -233,7 +233,7 @@ describe('reviewAndCreateNode', () => {
     await expect(access(join(tmpDir, 'test-seed', 'hypothesis', 'hyp-001.md'))).rejects.toThrow()
   })
 
-  it('saves directly without review for existing_solution', async () => {
+  it('skips review and returns passed for existing_solution without spawning', async () => {
     const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
     const draft = { ...baseDraft, type: 'existing_solution' as const, id: 'es-001' }
     const neverCalled = vi.fn()
@@ -245,9 +245,6 @@ describe('reviewAndCreateNode', () => {
     expect(result.passed).toBe(true)
     expect(result.feedback).toHaveLength(0)
     expect(neverCalled).not.toHaveBeenCalled()
-
-    const content = await readFile(join(tmpDir, 'test-seed', 'existing_solution', 'es-001.md'), 'utf-8')
-    expect(content).toContain('Users with high AI spend prefer local inference.')
   })
 
   it('includes RMS score and per-reviewer feedback in result', async () => {
@@ -263,7 +260,6 @@ describe('reviewAndCreateNode', () => {
   })
 
   it('uses a max of 3 review rounds to prevent infinite loops', async () => {
-    // This tests that reviewAndCreateNode with maxRounds option caps iterations
     const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
     const result = await reviewAndCreateNode(baseDraft, tmpDir, {
       spawner: makeSpawner(0.3, 'Bad.'),
