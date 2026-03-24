@@ -7,6 +7,7 @@ import { searchWeb } from './tools/search.ts'
 import { readPage } from './tools/read-page.ts'
 import { createSeed, listSeeds } from './tools/seeds.ts'
 import { createNode, queryGraph, createReview, queryReviews } from './tools/graph.ts'
+import { reviewAndCreateNode } from './tools/review-panel.ts'
 
 const NODE_TYPES = [
   'observation',
@@ -142,6 +143,88 @@ export default function setup(pi: ExtensionAPI): void {
       await createNode(params as Parameters<typeof createNode>[0], seedsDir)
       return {
         content: [{ type: 'text', text: `Node '${params.id}' created.` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── review_and_create_node ──────────────────────────────────────────────
+  pi.registerTool({
+    name: 'review_and_create_node',
+    label: 'Review and Create Node',
+    description: `Submit a draft node for parallel review by specialist subagents. Each reviewer has its own context and evaluates the node independently. Returns reviewer feedback and scores.
+
+If the RMS score across all reviewers is ≥ 0.8, the node is saved automatically. If not, rewrite the node addressing the feedback and call this tool again with the revised content.
+
+Reviewers dispatched per type:
+- observation, pain_point, persona, market_signal → assumption checker
+- hypothesis, conjecture → assumption + counterpoint + logic
+- product_plan → assumption + counterpoint + logic + failure mode
+- validation_strategy, risk → logic
+- existing_solution → no review (saved directly)
+- assumption → counterpoint`,
+    parameters: Type.Object({
+      seed: Type.String({ description: 'Seed slug' }),
+      type: Type.Union(NODE_TYPES.map((t) => Type.Literal(t)), { description: 'Node type' }),
+      id: Type.String({ description: 'Unique node id, e.g. obs-001' }),
+      title: Type.Optional(Type.String({ description: 'Pithy one-line title for the node (max ~12 words)' })),
+      content: Type.String({ description: 'Body text of the node' }),
+      confidence: Type.Optional(Type.Number({ description: 'Confidence 0–1' })),
+      sourceUrl: Type.Optional(Type.String({ description: 'Source URL' })),
+      links: Type.Optional(Type.Array(
+        Type.Object({
+          relation: Type.String(),
+          target: Type.String({ description: 'Target node id' }),
+        }),
+        { description: 'Wikilink edges to other nodes' }
+      )),
+      probability: Type.Optional(Type.Number({ description: '(risk) Probability 0–1 that this risk materialises' })),
+      severity: Type.Optional(Type.Union(
+        ['critical', 'high', 'medium', 'low'].map((s) => Type.Literal(s)),
+        { description: '(risk) Impact severity if the risk materialises' }
+      )),
+      status: Type.Optional(Type.Union(
+        ['open', 'mitigated', 'accepted', 'closed'].map((s) => Type.Literal(s)),
+        { description: '(risk) Current status' }
+      )),
+      signalType: Type.Optional(Type.Union(
+        ['community_growth', 'pricing_change', 'competitor_move', 'adoption_data'].map((s) => Type.Literal(s)),
+        { description: '(market_signal) Category of signal' }
+      )),
+    }),
+    async execute(_id, params, signal) {
+      const result = await reviewAndCreateNode(
+        params as Parameters<typeof reviewAndCreateNode>[0],
+        seedsDir,
+        { signal, cwd: process.cwd() }
+      )
+
+      if (result.passed && result.feedback.length === 0) {
+        return {
+          content: [{ type: 'text', text: `Node '${params.id}' saved (no review needed for ${params.type}).` }],
+          details: {},
+        }
+      }
+
+      const feedbackText = result.feedback.map(f =>
+        `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
+      ).join('\n\n')
+
+      if (result.passed) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved.\n\n${feedbackText}`
+          }],
+          details: {},
+        }
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
+        }],
         details: {},
       }
     },

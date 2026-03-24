@@ -50,6 +50,7 @@ describe('researcher extension', () => {
     'query_graph',
     'create_review',
     'query_reviews',
+    'review_and_create_node',
   ]
 
   for (const tool of expectedTools) {

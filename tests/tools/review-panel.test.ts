@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtemp, rm, readFile, mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 describe('calculateRmsScore', () => {
   it('returns 1.0 for all-1.0 scores', async () => {
@@ -132,5 +135,93 @@ describe('runReviewRound', () => {
     )
     expect(feedback).toHaveLength(4)
     expect(feedback.map(f => f.role).sort()).toEqual(['assumption', 'counterpoint', 'failure_mode', 'logic'])
+  })
+})
+
+describe('reviewAndCreateNode', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'review-panel-test-'))
+    // Create seed structure with _index.md
+    await mkdir(join(tmpDir, 'test-seed'), { recursive: true })
+    await writeFile(join(tmpDir, 'test-seed', '_index.md'), '# Test Seed\n\nContext.', 'utf-8')
+  })
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  const baseDraft = {
+    seed: 'test-seed',
+    type: 'hypothesis' as const,
+    id: 'hyp-001',
+    title: 'Users prefer local AI',
+    content: 'Users with high AI spend prefer local inference.',
+    confidence: 0.75,
+  }
+
+  function makeSpawner(score: number, feedback: string) {
+    return async () => {
+      const event = JSON.stringify({
+        type: 'message_end',
+        message: { role: 'assistant', content: [{ type: 'text', text: JSON.stringify({ score, feedback }) }] }
+      })
+      return { stdout: event + '\n', stderr: '', exitCode: 0 }
+    }
+  }
+
+  it('saves node when RMS score >= 0.8', async () => {
+    const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
+    const result = await reviewAndCreateNode(baseDraft, tmpDir, { spawner: makeSpawner(0.9, 'Good.') })
+
+    expect(result.passed).toBe(true)
+    expect(result.rmsScore).toBeGreaterThanOrEqual(0.8)
+
+    // Node should be written to disk
+    const content = await readFile(join(tmpDir, 'test-seed', 'hypothesis', 'hyp-001.md'), 'utf-8')
+    expect(content).toContain('Users with high AI spend prefer local inference.')
+  })
+
+  it('returns feedback without saving when RMS score < 0.8', async () => {
+    const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
+    const result = await reviewAndCreateNode(baseDraft, tmpDir, { spawner: makeSpawner(0.4, 'Weak.') })
+
+    expect(result.passed).toBe(false)
+    expect(result.rmsScore).toBeLessThan(0.8)
+    expect(result.feedback).toHaveLength(3) // hypothesis gets 3 reviewers
+
+    // Node should NOT be on disk
+    const { access } = await import('node:fs/promises')
+    await expect(access(join(tmpDir, 'test-seed', 'hypothesis', 'hyp-001.md'))).rejects.toThrow()
+  })
+
+  it('saves directly without review for existing_solution', async () => {
+    const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
+    const draft = { ...baseDraft, type: 'existing_solution' as const, id: 'es-001' }
+    const neverCalled = vi.fn()
+
+    const result = await reviewAndCreateNode(draft, tmpDir, {
+      spawner: async () => { neverCalled(); return { stdout: '', stderr: '', exitCode: 0 } }
+    })
+
+    expect(result.passed).toBe(true)
+    expect(result.feedback).toHaveLength(0)
+    expect(neverCalled).not.toHaveBeenCalled()
+
+    const content = await readFile(join(tmpDir, 'test-seed', 'existing_solution', 'es-001.md'), 'utf-8')
+    expect(content).toContain('Users with high AI spend prefer local inference.')
+  })
+
+  it('includes RMS score and per-reviewer feedback in result', async () => {
+    const { reviewAndCreateNode } = await import('../../src/tools/review-panel.ts')
+    const result = await reviewAndCreateNode(baseDraft, tmpDir, { spawner: makeSpawner(0.85, 'Solid work.') })
+
+    expect(typeof result.rmsScore).toBe('number')
+    for (const f of result.feedback) {
+      expect(f).toHaveProperty('role')
+      expect(f).toHaveProperty('score')
+      expect(f).toHaveProperty('feedback')
+    }
   })
 })
