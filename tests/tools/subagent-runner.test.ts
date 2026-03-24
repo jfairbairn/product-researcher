@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 describe('parseReviewerOutput', () => {
   it('extracts score and feedback from valid JSON', async () => {
@@ -97,5 +97,82 @@ describe('parseJsonEventStream', () => {
       '}{bad',
     ].join('\n')
     expect(parseJsonEventStream(lines)).toBe('ok')
+  })
+})
+
+describe('runSubagent', () => {
+  it('builds correct pi args from options', async () => {
+    const { buildPiArgs } = await import('../../src/tools/subagent-runner.ts')
+    const args = buildPiArgs({
+      systemPromptFile: '/tmp/prompt.md',
+      task: 'Review this node',
+      tools: ['read', 'grep', 'find', 'ls'],
+      model: 'claude-haiku-4-5',
+    })
+    expect(args).toContain('--mode')
+    expect(args).toContain('json')
+    expect(args).toContain('-p')
+    expect(args).toContain('--no-session')
+    expect(args).toContain('--model')
+    expect(args).toContain('claude-haiku-4-5')
+    expect(args).toContain('--tools')
+    expect(args).toContain('read,grep,find,ls')
+    expect(args).toContain('--append-system-prompt')
+    expect(args).toContain('/tmp/prompt.md')
+    // Task should be the last argument
+    expect(args[args.length - 1]).toBe('Task: Review this node')
+  })
+
+  it('omits --model when not specified', async () => {
+    const { buildPiArgs } = await import('../../src/tools/subagent-runner.ts')
+    const args = buildPiArgs({
+      systemPromptFile: '/tmp/prompt.md',
+      task: 'Do something',
+    })
+    expect(args).not.toContain('--model')
+  })
+
+  it('omits --tools when not specified', async () => {
+    const { buildPiArgs } = await import('../../src/tools/subagent-runner.ts')
+    const args = buildPiArgs({
+      systemPromptFile: '/tmp/prompt.md',
+      task: 'Do something',
+    })
+    expect(args).not.toContain('--tools')
+  })
+})
+
+describe('runSubagent', () => {
+  it('returns parsed output from a successful subprocess', async () => {
+    const { runSubagent } = await import('../../src/tools/subagent-runner.ts')
+
+    const assistantEvent = JSON.stringify({
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: '{"score": 0.85, "feedback": "Good."}' }] }
+    })
+
+    const result = await runSubagent({
+      systemPrompt: 'You are a reviewer.',
+      task: 'Review this.',
+      cwd: '/tmp',
+      spawner: async () => ({ stdout: assistantEvent + '\n', stderr: '', exitCode: 0 }),
+    })
+
+    expect(result.output).toBe('{"score": 0.85, "feedback": "Good."}')
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('returns stderr and exit code on failure', async () => {
+    const { runSubagent } = await import('../../src/tools/subagent-runner.ts')
+
+    const result = await runSubagent({
+      systemPrompt: 'You are a reviewer.',
+      task: 'Review this.',
+      cwd: '/tmp',
+      spawner: async () => ({ stdout: '', stderr: 'pi: command not found', exitCode: 127 }),
+    })
+
+    expect(result.exitCode).toBe(127)
+    expect(result.output).toBe('')
   })
 })
