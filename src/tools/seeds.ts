@@ -1,4 +1,5 @@
 import { mkdir, writeFile, readFile, readdir, access } from 'node:fs/promises'
+import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface SeedOptions {
@@ -84,4 +85,19 @@ export async function listSeeds(seedsDir: string): Promise<SeedSummary[]> {
 function extract(content: string, key: string): string | undefined {
   const match = content.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
   return match?.[1]?.trim()
+}
+
+export function listSeedSlugsSync(seedsDir: string): string[] {
+  try {
+    return readdirSync(seedsDir)
+      .filter((entry) => {
+        try {
+          return statSync(join(seedsDir, entry, 'seed.md')).isFile()
+        } catch {
+          return false
+        }
+      })
+  } catch {
+    return []
+  }
 }

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 
 import { searchWeb } from './tools/search.ts'
 import { readPage } from './tools/read-page.ts'
-import { createSeed, listSeeds } from './tools/seeds.ts'
+import { createSeed, listSeeds, listSeedSlugsSync } from './tools/seeds.ts'
 import { createNode, queryGraph, createReview, queryReviews } from './tools/graph.ts'
 import { reviewAndCreateNode } from './tools/review-panel.ts'
 
@@ -422,6 +422,12 @@ Reviewers dispatched per type:
   // ── /research command ─────────────────────────────────────────────────────
   pi.registerCommand('research', {
     description: 'Start a research session against a seed: /research <slug>',
+    getArgumentCompletions: (prefix: string) => {
+      const slugs = listSeedSlugsSync(seedsDir)
+      const items = slugs.map((s) => ({ value: s, label: s }))
+      const filtered = prefix ? items.filter((i) => i.value.startsWith(prefix)) : items
+      return filtered.length > 0 ? filtered : null
+    },
     handler: async (args, ctx) => {
       const slug = (args ?? '').trim()
 
@@ -481,6 +487,12 @@ Stay focused. Prefer depth over breadth. When a reviewer challenges your node, t
   // ── /review command ───────────────────────────────────────────────────────
   pi.registerCommand('review', {
     description: 'Run a review pass on unreviewed nodes in a seed: /review <slug> [node-id] [--role assumption|counterpoint|logic|failure_mode]',
+    getArgumentCompletions: (prefix: string) => {
+      const slugs = listSeedSlugsSync(seedsDir)
+      const items = slugs.map((s) => ({ value: s, label: s }))
+      const filtered = prefix ? items.filter((i) => i.value.startsWith(prefix)) : items
+      return filtered.length > 0 ? filtered : null
+    },
     handler: async (args, ctx) => {
       const parts = (args ?? '').trim().split(/\s+/)
       const slug = parts[0]

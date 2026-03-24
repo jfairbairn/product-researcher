@@ -72,4 +72,20 @@ describe('researcher extension', () => {
     const names = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
     expect(names).toContain('seed')
   })
+
+  it('/research command has getArgumentCompletions', () => {
+    setup(pi)
+    const calls = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls
+    const researchCmd = calls.find((c) => c[0] === 'research')
+    expect(researchCmd).toBeDefined()
+    expect(typeof researchCmd![1].getArgumentCompletions).toBe('function')
+  })
+
+  it('/review command has getArgumentCompletions', () => {
+    setup(pi)
+    const calls = (pi.registerCommand as ReturnType<typeof vi.fn>).mock.calls
+    const reviewCmd = calls.find((c) => c[0] === 'review')
+    expect(reviewCmd).toBeDefined()
+    expect(typeof reviewCmd![1].getArgumentCompletions).toBe('function')
+  })
 })

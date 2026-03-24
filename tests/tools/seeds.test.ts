@@ -86,3 +86,34 @@ describe('listSeeds', () => {
     )
   })
 })
+
+describe('listSeedSlugsSync', () => {
+  it('returns an empty array when no seeds exist', async () => {
+    const { listSeedSlugsSync } = await import('../../src/tools/seeds.ts')
+    expect(listSeedSlugsSync(tmpDir)).toEqual([])
+  })
+
+  it('returns slugs of existing seeds', async () => {
+    const { createSeed, listSeedSlugsSync } = await import('../../src/tools/seeds.ts')
+    await createSeed({ slug: 'alpha', title: 'Alpha' }, tmpDir)
+    await createSeed({ slug: 'beta', title: 'Beta' }, tmpDir)
+
+    const slugs = listSeedSlugsSync(tmpDir)
+    expect(slugs.sort()).toEqual(['alpha', 'beta'])
+  })
+
+  it('returns an empty array when seeds dir does not exist', async () => {
+    const { listSeedSlugsSync } = await import('../../src/tools/seeds.ts')
+    expect(listSeedSlugsSync('/nonexistent/path')).toEqual([])
+  })
+
+  it('ignores directories without seed.md', async () => {
+    const { createSeed, listSeedSlugsSync } = await import('../../src/tools/seeds.ts')
+    const { mkdir } = await import('node:fs/promises')
+    await createSeed({ slug: 'real', title: 'Real' }, tmpDir)
+    await mkdir(join(tmpDir, 'not-a-seed'), { recursive: true })
+
+    const slugs = listSeedSlugsSync(tmpDir)
+    expect(slugs).toEqual(['real'])
+  })
+})
