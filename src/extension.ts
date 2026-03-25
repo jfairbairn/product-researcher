@@ -196,7 +196,7 @@ Reviewers dispatched per type:
       const result = await reviewAndCreateNode(
         params as Parameters<typeof reviewAndCreateNode>[0],
         seedsDir,
-        { signal, cwd: process.cwd() }
+        { signal, cwd: ctx?.cwd ?? process.cwd() }
       )
 
       const feedbackText = result.feedback.length > 0
@@ -205,7 +205,6 @@ Reviewers dispatched per type:
           ).join('\n\n')
         : ''
 
-      // ── Always present to user — RMS score is informational, not a hard gate ──
       const nodePreview = [
         `**${params.id}** (${params.type})`,
         params.title ? `*${params.title}*` : null,
@@ -214,68 +213,34 @@ Reviewers dispatched per type:
         params.content,
       ].filter(l => l !== null).join('\n')
 
-      const passedLabel = result.passed ? '✓ PASSED' : '✗ BELOW THRESHOLD'
-      const reviewSummary = result.feedback.length > 0
-        ? `\n\n── Reviewer scores (RMS: ${result.rmsScore.toFixed(2)} ${passedLabel}) ──\n${result.feedback.map(f => `  ${f.role}: ${f.score.toFixed(2)}`).join('\n')}`
-        : ' (no review needed)'
+      const passedLabel = result.passed ? '✓ PASSED (RMS ≥ 0.8)' : '✗ BELOW THRESHOLD (RMS < 0.8)'
+      const scoreLine = result.feedback.length > 0
+        ? `RMS score: ${result.rmsScore.toFixed(2)} — ${passedLabel}\nPer reviewer: ${result.feedback.map(f => `${f.role}: ${f.score.toFixed(2)}`).join(', ')}`
+        : 'No review needed (existing_solution)'
 
-      if (ctx?.hasUI) {
-        const choice = await ctx.ui.select(
-          `Node for review${reviewSummary}\n\n${nodePreview}`,
-          ['Save', 'Revise — I have feedback', 'Discard — move on']
-        )
-
-        if (choice === 'Save') {
-          await createNode(params as Parameters<typeof createNode>[0], seedsDir)
-          return {
-            content: [{
-              type: 'text',
-              text: `Node '${params.id}' approved by user and saved.\n\n${feedbackText}`
-            }],
-            details: {},
-          }
-        }
-
-        if (choice === 'Revise — I have feedback') {
-          const userFeedback = await ctx.ui.input('What should be changed?', '')
-          const feedbackMsg = userFeedback?.trim()
-            ? `The user wants changes: ${userFeedback.trim()}`
-            : 'The user wants changes but did not specify what. Ask them.'
-          return {
-            content: [{
-              type: 'text',
-              text: `Node '${params.id}' was NOT approved by the user. ${feedbackMsg}\n\nRewrite the node addressing the user's feedback, then call review_and_create_node again.\n\n${feedbackText}`
-            }],
-            details: {},
-          }
-        }
-
-        // Discard or cancelled
-        return {
-          content: [{
-            type: 'text',
-            text: `Node '${params.id}' discarded by user. Move on to the next finding.`
-          }],
-          details: {},
-        }
-      }
-
-      // ── No UI (print mode, RPC, etc.) — auto-save if passed, return feedback if not ──
-      if (result.passed) {
-        await createNode(params as Parameters<typeof createNode>[0], seedsDir)
-        return {
-          content: [{
-            type: 'text',
-            text: `Node '${params.id}' PASSED review (RMS: ${result.rmsScore.toFixed(2)}) and saved (auto-approved, no UI).\n\n${feedbackText}`
-          }],
-          details: {},
-        }
-      }
-
+      // ── Never auto-save. Always return feedback to the AI and require it to
+      // present the node + reviewer feedback to the user and wait for their
+      // explicit instruction (save / revise / discard) before calling create_node.
       return {
         content: [{
           type: 'text',
-          text: `Node '${params.id}' DID NOT PASS review (RMS: ${result.rmsScore.toFixed(2)}). Rewrite the node addressing the feedback below, then call review_and_create_node again with the revised content.\n\n${feedbackText}`
+          text: [
+            `## Node ready for your review`,
+            ``,
+            scoreLine,
+            ``,
+            `### Node draft`,
+            nodePreview,
+            ``,
+            feedbackText ? `### Reviewer feedback\n\n${feedbackText}` : '',
+            ``,
+            `## ⚠️ STOP — present this to the user before proceeding`,
+            `Show the node draft and reviewer feedback above to the user in your reply.`,
+            `Ask them explicitly: **"Should I save this node, revise it, or discard it?"**`,
+            `Wait for their response. Do NOT call create_node or move on until they reply.`,
+            `If they want revisions, ask what changes to make, then call review_and_create_node again with the revised content.`,
+            `If they want to save, call create_node with the same params.`,
+          ].filter(Boolean).join('\n'),
         }],
         details: {},
       }

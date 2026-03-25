@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtemp, rm, mkdir, writeFile, access } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { ExtensionAPI } from '@mariozechner/pi-coding-agent'
 
 vi.mock('playwright', () => ({
@@ -87,5 +90,113 @@ describe('researcher extension', () => {
     const reviewCmd = calls.find((c) => c[0] === 'review')
     expect(reviewCmd).toBeDefined()
     expect(typeof reviewCmd![1].getArgumentCompletions).toBe('function')
+  })
+})
+
+describe('review_and_create_node execute behaviour', () => {
+  let tmpDir: string
+  let setup: (pi: ExtensionAPI) => void
+  let pi: ExtensionAPI
+
+  beforeEach(async () => {
+    vi.resetModules()
+
+    tmpDir = await mkdtemp(join(tmpdir(), 'ext-review-test-'))
+    await mkdir(join(tmpDir, 'test-seed'), { recursive: true })
+    await writeFile(join(tmpDir, 'test-seed', '_index.md'), '# Test Seed', 'utf-8')
+
+    // Mock reviewAndCreateNode so the test doesn't spin up subagents
+    vi.doMock('../src/tools/review-panel.ts', () => ({
+      reviewAndCreateNode: vi.fn().mockResolvedValue({
+        passed: true,
+        rmsScore: 0.85,
+        feedback: [{ role: 'assumption', score: 0.85, feedback: 'Looks solid.' }],
+      }),
+    }))
+
+    // Mock graph so createNode is trackable
+    vi.doMock('../src/tools/graph.ts', () => ({
+      createNode: vi.fn().mockResolvedValue(undefined),
+      queryGraph: vi.fn().mockResolvedValue([]),
+      createReview: vi.fn().mockResolvedValue(undefined),
+      queryReviews: vi.fn().mockResolvedValue([]),
+    }))
+
+    const mod = await import('../src/extension.ts')
+    setup = mod.default
+
+    pi = {
+      on: vi.fn(),
+      registerTool: vi.fn(),
+      registerCommand: vi.fn(),
+      sendUserMessage: vi.fn(),
+    } as unknown as ExtensionAPI
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  function getExecute(toolName: string) {
+    setup(pi)
+    const calls = (pi.registerTool as ReturnType<typeof vi.fn>).mock.calls
+    const toolCall = calls.find((c) => c[0].name === toolName)
+    if (!toolCall) throw new Error(`Tool '${toolName}' not registered`)
+    return toolCall[0].execute as (...args: unknown[]) => Promise<{ content: Array<{ text: string }> }>
+  }
+
+  const draftParams = {
+    seed: 'test-seed',
+    type: 'hypothesis' as const,
+    id: 'hyp-001',
+    title: 'Test hypothesis',
+    content: 'This is the hypothesis body.',
+    confidence: 0.7,
+  }
+
+  it('returns reviewer feedback in the response text', async () => {
+    const execute = getExecute('review_and_create_node')
+    // Pass a fake cwd pointing at tmpDir so the tool finds the seed
+    const result = await execute('call-1', { ...draftParams }, undefined, undefined, {
+      hasUI: false,
+      cwd: tmpDir,
+    })
+    const text = result.content[0].text
+    expect(text).toContain('assumption')
+    expect(text).toContain('Looks solid.')
+  })
+
+  it('instructs the AI to present feedback to the user and wait before saving', async () => {
+    const execute = getExecute('review_and_create_node')
+    const result = await execute('call-1', { ...draftParams }, undefined, undefined, {
+      hasUI: false,
+      cwd: tmpDir,
+    })
+    const text = result.content[0].text
+    // Should tell the AI to stop and check with the user
+    expect(text.toLowerCase()).toMatch(/present|show|ask the user|check with/)
+    expect(text.toLowerCase()).toMatch(/save|revise|discard/)
+    expect(text.toLowerCase()).toMatch(/wait|before/)
+  })
+
+  it('does NOT save the node to disk regardless of RMS score or hasUI', async () => {
+    const { createNode } = await import('../src/tools/graph.ts')
+    const execute = getExecute('review_and_create_node')
+
+    // Test with hasUI false (was: auto-save path)
+    await execute('call-1', { ...draftParams }, undefined, undefined, {
+      hasUI: false,
+      cwd: tmpDir,
+    })
+    expect(createNode).not.toHaveBeenCalled()
+
+    // Test with hasUI true (was: dialog path that could auto-save)
+    await execute('call-2', { ...draftParams }, undefined, undefined, {
+      hasUI: true,
+      ui: { select: vi.fn().mockResolvedValue('Save') },
+      cwd: tmpDir,
+    })
+    expect(createNode).not.toHaveBeenCalled()
   })
 })
