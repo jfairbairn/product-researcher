@@ -191,11 +191,27 @@ describe('review_and_create_node execute behaviour', () => {
     expect(createNode).not.toHaveBeenCalled()
   })
 
+  it('calls ui.select with plain strings, not objects', async () => {
+    const execute = getExecute('review_and_create_node')
+    const selectMock = vi.fn().mockResolvedValue('Discard — move on')
+
+    await execute('call-2', { ...draftParams }, undefined, undefined, {
+      hasUI: true,
+      ui: { select: selectMock, input: vi.fn().mockResolvedValue('') },
+      cwd: tmpDir,
+    })
+
+    expect(selectMock).toHaveBeenCalledOnce()
+    const options = selectMock.mock.calls[0][1] as unknown[]
+    // Every option must be a plain string — NOT an object like { label, value }
+    expect(options.every((o) => typeof o === 'string')).toBe(true)
+  })
+
   it('DOES save the node when the user picks Save via the UI select prompt', async () => {
     const { createNode } = await import('../src/tools/graph.ts')
     const execute = getExecute('review_and_create_node')
 
-    await execute('call-2', { ...draftParams }, undefined, undefined, {
+    await execute('call-3', { ...draftParams }, undefined, undefined, {
       hasUI: true,
       ui: { select: vi.fn().mockResolvedValue('Save'), input: vi.fn().mockResolvedValue('') },
       cwd: tmpDir,
@@ -207,7 +223,7 @@ describe('review_and_create_node execute behaviour', () => {
     const { createNode } = await import('../src/tools/graph.ts')
     const execute = getExecute('review_and_create_node')
 
-    await execute('call-3', { ...draftParams }, undefined, undefined, {
+    await execute('call-4', { ...draftParams }, undefined, undefined, {
       hasUI: true,
       ui: { select: vi.fn().mockResolvedValue('Discard — move on'), input: vi.fn().mockResolvedValue('') },
       cwd: tmpDir,

@@ -232,9 +232,9 @@ Reviewers dispatched per type:
         ].filter(Boolean).join('\n')
 
         const choice = await ctx.ui.select(selectPrompt, [
-          { label: 'Save', value: 'Save' },
-          { label: 'Revise — I have feedback', value: 'Revise — I have feedback' },
-          { label: 'Discard — move on', value: 'Discard — move on' },
+          'Save',
+          'Revise — I have feedback',
+          'Discard — move on',
         ])
 
         if (choice === 'Save') {
