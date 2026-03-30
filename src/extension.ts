@@ -199,12 +199,6 @@ Reviewers dispatched per type:
         { signal, cwd: ctx?.cwd ?? process.cwd() }
       )
 
-      const feedbackText = result.feedback.length > 0
-        ? result.feedback.map(f =>
-            `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
-          ).join('\n\n')
-        : ''
-
       const nodePreview = [
         `**${params.id}** (${params.type})`,
         params.title ? `*${params.title}*` : null,
@@ -218,9 +212,57 @@ Reviewers dispatched per type:
         ? `RMS score: ${result.rmsScore.toFixed(2)} — ${passedLabel}\nPer reviewer: ${result.feedback.map(f => `${f.role}: ${f.score.toFixed(2)}`).join(', ')}`
         : 'No review needed (existing_solution)'
 
-      // ── Never auto-save. Always return feedback to the AI and require it to
-      // present the node + reviewer feedback to the user and wait for their
-      // explicit instruction (save / revise / discard) before calling create_node.
+      const feedbackText = result.feedback.length > 0
+        ? result.feedback.map(f =>
+            `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
+          ).join('\n\n')
+        : ''
+
+      // ── When a UI is available, show the full reviewer feedback inside the
+      // select prompt so the user can read the reasoning BEFORE deciding.
+      if (ctx?.hasUI && ctx.ui) {
+        const selectPrompt = [
+          `## Node ready for your review`,
+          ``,
+          scoreLine,
+          ``,
+          `### Node draft`,
+          nodePreview,
+          feedbackText ? `\n### Reviewer feedback\n\n${feedbackText}` : '',
+        ].filter(Boolean).join('\n')
+
+        const choice = await ctx.ui.select(selectPrompt, [
+          { label: 'Save', value: 'Save' },
+          { label: 'Revise — I have feedback', value: 'Revise — I have feedback' },
+          { label: 'Discard — move on', value: 'Discard — move on' },
+        ])
+
+        if (choice === 'Save') {
+          const { createNode } = await import('./tools/graph.ts')
+          await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+          return {
+            content: [{ type: 'text', text: `Node '${params.id}' saved.` }],
+            details: {},
+          }
+        }
+
+        if (choice === 'Revise — I have feedback') {
+          const revision = await ctx.ui.input('What should be revised?', '')
+          return {
+            content: [{ type: 'text', text: `Revision requested: ${revision ?? '(no details provided)'}\n\nPlease rewrite the node addressing this feedback, then call review_and_create_node again.` }],
+            details: {},
+          }
+        }
+
+        // Discard
+        return {
+          content: [{ type: 'text', text: `Node '${params.id}' discarded.` }],
+          details: {},
+        }
+      }
+
+      // ── No UI (headless / automated): return everything in the tool content
+      // so the AI can present it to the user in its reply.
       return {
         content: [{
           type: 'text',

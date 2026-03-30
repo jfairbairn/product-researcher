@@ -180,21 +180,36 @@ describe('review_and_create_node execute behaviour', () => {
     expect(text.toLowerCase()).toMatch(/wait|before/)
   })
 
-  it('does NOT save the node to disk regardless of RMS score or hasUI', async () => {
+  it('does NOT save the node to disk in the headless (no UI) path', async () => {
     const { createNode } = await import('../src/tools/graph.ts')
     const execute = getExecute('review_and_create_node')
 
-    // Test with hasUI false (was: auto-save path)
     await execute('call-1', { ...draftParams }, undefined, undefined, {
       hasUI: false,
       cwd: tmpDir,
     })
     expect(createNode).not.toHaveBeenCalled()
+  })
 
-    // Test with hasUI true (was: dialog path that could auto-save)
+  it('DOES save the node when the user picks Save via the UI select prompt', async () => {
+    const { createNode } = await import('../src/tools/graph.ts')
+    const execute = getExecute('review_and_create_node')
+
     await execute('call-2', { ...draftParams }, undefined, undefined, {
       hasUI: true,
-      ui: { select: vi.fn().mockResolvedValue('Save') },
+      ui: { select: vi.fn().mockResolvedValue('Save'), input: vi.fn().mockResolvedValue('') },
+      cwd: tmpDir,
+    })
+    expect(createNode).toHaveBeenCalledOnce()
+  })
+
+  it('does NOT save when the user picks Discard via the UI select prompt', async () => {
+    const { createNode } = await import('../src/tools/graph.ts')
+    const execute = getExecute('review_and_create_node')
+
+    await execute('call-3', { ...draftParams }, undefined, undefined, {
+      hasUI: true,
+      ui: { select: vi.fn().mockResolvedValue('Discard — move on'), input: vi.fn().mockResolvedValue('') },
       cwd: tmpDir,
     })
     expect(createNode).not.toHaveBeenCalled()
