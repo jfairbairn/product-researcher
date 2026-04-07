@@ -227,13 +227,16 @@ Reviewers dispatched per type:
           ).join('\n\n')
         : ''
 
-      const round = (params as Record<string, unknown>).round as number | undefined ?? 1
-      const previousRmsScores = (params as Record<string, unknown>).previousRmsScores as number[] | undefined ?? []
+      const p = params as Record<string, unknown>
+      const round = (p.round as number | undefined) ?? 1
+      const previousRmsScores = (p.previousRmsScores as number[] | undefined) ?? []
       const allScores = [...previousRmsScores, result.rmsScore]
-      const isDecliningSuffix = allScores.length >= 3 && allScores[allScores.length - 1] <= allScores[allScores.length - 2] && allScores[allScores.length - 2] <= allScores[allScores.length - 3]
+      const isDeclining = allScores.length >= 3
+        && allScores[allScores.length - 1] <= allScores[allScores.length - 2]
+        && allScores[allScores.length - 2] <= allScores[allScores.length - 3]
 
       const roundInfo = round > 1
-        ? `\n\n**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}${isDecliningSuffix ? '\n\n⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.' : ''}`
+        ? `\n\n**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}${isDeclining ? '\n\n⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.' : ''}`
         : ''
 
       function buildAcceptRewriteResponse(selectedFeedback: typeof result.feedback): { content: { type: 'text'; text: string }[]; details: Record<string, never> } {
@@ -336,7 +339,7 @@ Reviewers dispatched per type:
             `## Node ready for your review`,
             ``,
             round > 1 ? `**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}` : null,
-            isDecliningSuffix ? `⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.` : null,
+            isDeclining ? `⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.` : null,
             ``,
             scoreLine,
             ``,
