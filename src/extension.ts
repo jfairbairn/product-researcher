@@ -200,6 +200,7 @@ Reviewers dispatched per type:
       )),
       round: Type.Optional(Type.Number({ description: 'Review round number (starts at 1, increment on each rewrite)' })),
       previousRmsScores: Type.Optional(Type.Array(Type.Number(), { description: 'RMS scores from previous rounds, for tracking quality trajectory' })),
+      autoMode: Type.Optional(Type.Boolean({ description: 'When true, skip all UI interaction: auto-save on pass, auto-rewrite on fail, auto-discard on declining scores' })),
     }),
     async execute(_id, params, signal, _onUpdate, ctx) {
       const result = await reviewAndCreateNode(
@@ -228,6 +229,7 @@ Reviewers dispatched per type:
         : ''
 
       const p = params as Record<string, unknown>
+      const autoMode = Boolean(p.autoMode)
       const round = (p.round as number | undefined) ?? 1
       const previousRmsScores = (p.previousRmsScores as number[] | undefined) ?? []
       const allScores = [...previousRmsScores, result.rmsScore]
@@ -238,6 +240,45 @@ Reviewers dispatched per type:
       const roundInfo = round > 1
         ? `\n\n**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}${isDeclining ? '\n\n⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.' : ''}`
         : ''
+
+      // ── autoMode: skip all UI, make autonomous decisions ──────────────
+      if (autoMode) {
+        // Passed or no reviewers: auto-save
+        if (result.passed) {
+          const { createNode } = await import('./tools/graph.ts')
+          await createNode(params as Parameters<typeof createNode>[0], seedsDir)
+          return {
+            content: [{ type: 'text', text: `Node '${params.id}' auto-saved (RMS: ${result.rmsScore.toFixed(2)}).` }],
+            details: {},
+          }
+        }
+
+        // Declining scores across 3+ rounds: auto-discard
+        if (isDeclining) {
+          return {
+            content: [{ type: 'text', text: `Node '${params.id}' auto-discarded — scores declining across rounds (${allScores.map(s => s.toFixed(2)).join(' → ')}). Giving up on this node; move on to other research.` }],
+            details: {},
+          }
+        }
+
+        // Failed but not declining: return rewrite instructions
+        const feedbackInstructions = result.feedback.map(f =>
+          `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
+        ).join('\n\n')
+
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `Rewrite the node addressing the following reviewer feedback, then call review_and_create_node again with round: ${round + 1}, previousRmsScores: [${allScores.map(s => s.toFixed(2)).join(', ')}], and autoMode: true.`,
+              ``,
+              feedbackInstructions,
+              roundInfo,
+            ].filter(Boolean).join('\n'),
+          }],
+          details: {},
+        }
+      }
 
       function buildAcceptRewriteResponse(selectedFeedback: typeof result.feedback): { content: { type: 'text'; text: string }[]; details: Record<string, never> } {
         const feedbackInstructions = selectedFeedback.map(f =>
