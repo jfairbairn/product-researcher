@@ -695,6 +695,95 @@ ${rolePrompt}
     },
   })
 
+  // ── /autoresearch command ──────────────────────────────────────────────────
+  pi.registerCommand('autoresearch', {
+    description: 'Run autonomous research against a seed until a product plan emerges: /autoresearch <slug>',
+    getArgumentCompletions: (prefix: string) => {
+      const slugs = listSeedSlugsSync(seedsDir)
+      const items = slugs.map((s) => ({ value: s, label: s }))
+      const filtered = prefix ? items.filter((i) => i.value.startsWith(prefix)) : items
+      return filtered.length > 0 ? filtered : null
+    },
+    handler: async (args, ctx) => {
+      const slug = (args ?? '').trim()
+
+      if (!slug) {
+        ctx.ui.notify('Usage: /autoresearch <slug>', 'error')
+        return
+      }
+
+      let seedMd: string
+      let indexMd: string
+      try {
+        seedMd = await readFile(join(seedsDir, slug, 'seed.md'), 'utf-8')
+        indexMd = await readFile(join(seedsDir, slug, '_index.md'), 'utf-8')
+      } catch {
+        ctx.ui.notify(`Seed '${slug}' not found. Create it first with /seed ${slug}.`, 'error')
+        return
+      }
+
+      const prompt = `You are an autonomous product researcher. Your job is to research the seed idea below, build a knowledge graph, and work towards a concrete product plan — without human intervention.
+
+## Seed
+
+${seedMd}
+
+## Prior Findings (from _index.md)
+
+${indexMd}
+
+## Autonomous Mode
+
+You are running in **autonomous mode**. This means:
+- **Always pass \`autoMode: true\`** on every \`review_and_create_node\` call. This skips human review — nodes that pass reviewers are auto-saved, nodes that fail get rewrite instructions, and nodes with declining scores are auto-discarded.
+- **Do not ask the user for input.** Make your own judgment calls.
+- **When \`review_and_create_node\` returns rewrite instructions**, rewrite the node addressing the feedback and call \`review_and_create_node\` again with the incremented \`round\` and \`previousRmsScores\`. Keep \`autoMode: true\`.
+- **When a node is auto-discarded** (declining scores), move on. Don't keep trying.
+
+## Goal
+
+Your goal is to produce a **product_plan** node with:
+- **confidence ≥ 0.7**
+- **RMS review score ≥ 0.8** (i.e., it passes the review panel)
+
+This product plan should be grounded in evidence you've gathered — observations, validated hypotheses, identified pain points, personas, and market signals.
+
+## Research Strategy
+
+Work in rounds. Each round:
+1. **Orient** — read \`_index.md\` and \`query_graph\` to understand what you know so far.
+2. **Search** — use \`search_web\` and \`read_page\` to find new information. Use targeted, specific queries.
+3. **Synthesise** — create nodes (observations, hypotheses, pain points, personas, market signals, existing solutions) that capture what you've learned.
+4. **Challenge** — let the review panel challenge your interpretive nodes. Address feedback seriously.
+5. **Converge** — when you have enough evidence, attempt a \`product_plan\` node. If reviewers reject it, use the feedback to identify gaps and do more research.
+6. **Update \`_index.md\`** — after each round, update the index with key findings, open questions, and promising directions.
+
+## Stopping Conditions
+
+- **Success**: You have a saved \`product_plan\` node with confidence ≥ 0.7 that passed review (RMS ≥ 0.8). Update \`_index.md\` with a summary and stop.
+- **Stalled**: After several rounds, if you judge that the research is not converging towards a viable product plan — hypotheses keep getting blocked, no clear pain point or buyer emerges, market signals are weak — then **stop and report your findings**. Update \`_index.md\` with what you learned, why you think a product plan isn't viable, and what would need to change.
+- **Round 10 pause**: After completing 10 research rounds, **pause and present a summary to the user**. Report: what you've found, where you are relative to a product plan, what the most promising directions are, and what you'd do in the next 10 rounds. Then **wait for the user to tell you to continue or stop**.
+
+## Instructions
+
+1. Use \`search_web\` to find relevant pages. Use targeted queries.
+2. Use \`read_page\` to read promising pages in full.
+3. Use \`query_graph\` to check what nodes already exist before creating duplicates.
+4. Use \`review_and_create_node\` with \`autoMode: true\` for all interpretive nodes:
+   - \`hypothesis\`, \`conjecture\`, \`product_plan\`, \`assumption\`, \`persona\`, \`observation\`, \`pain_point\`, \`risk\`, \`market_signal\`, \`validation_strategy\`
+5. Use \`create_node\` (bypassing review) only for \`existing_solution\` nodes.
+6. Always include a \`title\` — a pithy one-line summary (max 12 words, active voice, specific).
+7. Link nodes using the \`links\` field (\`supports\`, \`informs\`, \`contradicts\`, \`underlies\`, \`threatens\`).
+8. Track your round number. Mention it when you update \`_index.md\`.
+
+Stay focused. Prefer depth over breadth. When reviewers challenge a node, take the feedback seriously — genuinely reconsider the claim rather than adding disclaimers.
+
+Begin round 1 now.`
+
+      pi.sendUserMessage(prompt)
+    },
+  })
+
   pi.on('session_start', async () => {
     // researcher extension loaded
   })
