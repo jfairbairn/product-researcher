@@ -154,7 +154,14 @@ export default function setup(pi: ExtensionAPI): void {
     label: 'Review and Create Node',
     description: `Submit a draft node for parallel review by specialist subagents. Each reviewer has its own context and evaluates the node independently. Returns reviewer feedback and scores.
 
-If the RMS score across all reviewers is ≥ 0.8, the node is presented to the user for final approval. The user can Save, Revise (with feedback), or Discard. If the user revises, rewrite the node addressing their feedback and call this tool again. If the RMS score is < 0.8, the node is still presented to the user — the user decides whether the reviewer critique is substantive enough to warrant revision. Do NOT automatically rewrite in a loop; let the user judge.
+The user is presented with the feedback and can choose:
+- **Save** — save the node as-is
+- **Accept all reviews — agent rewrites** — the agent rewrites the node addressing ALL reviewer feedback, then calls this tool again
+- **Accept selected reviews — choose which** — the user picks which reviews to incorporate, the agent rewrites addressing only those
+- **Revise — I have feedback** — the user provides their own feedback for the agent to address
+- **Discard — move on** — abandon the node
+
+When rewriting, increment the \`round\` parameter and pass \`previousRmsScores\` so quality trajectory can be tracked. If scores are declining across rounds, consider giving up on the node.
 
 Reviewers dispatched per type:
 - observation, pain_point, persona, market_signal → assumption checker
@@ -191,6 +198,8 @@ Reviewers dispatched per type:
         ['community_growth', 'pricing_change', 'competitor_move', 'adoption_data'].map((s) => Type.Literal(s)),
         { description: '(market_signal) Category of signal' }
       )),
+      round: Type.Optional(Type.Number({ description: 'Review round number (starts at 1, increment on each rewrite)' })),
+      previousRmsScores: Type.Optional(Type.Array(Type.Number(), { description: 'RMS scores from previous rounds, for tracking quality trajectory' })),
     }),
     async execute(_id, params, signal, _onUpdate, ctx) {
       const result = await reviewAndCreateNode(
@@ -218,6 +227,34 @@ Reviewers dispatched per type:
           ).join('\n\n')
         : ''
 
+      const round = (params as Record<string, unknown>).round as number | undefined ?? 1
+      const previousRmsScores = (params as Record<string, unknown>).previousRmsScores as number[] | undefined ?? []
+      const allScores = [...previousRmsScores, result.rmsScore]
+      const isDecliningSuffix = allScores.length >= 3 && allScores[allScores.length - 1] <= allScores[allScores.length - 2] && allScores[allScores.length - 2] <= allScores[allScores.length - 3]
+
+      const roundInfo = round > 1
+        ? `\n\n**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}${isDecliningSuffix ? '\n\n⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.' : ''}`
+        : ''
+
+      function buildAcceptRewriteResponse(selectedFeedback: typeof result.feedback): { content: { type: 'text'; text: string }[]; details: Record<string, never> } {
+        const feedbackInstructions = selectedFeedback.map(f =>
+          `### ${f.role} (score: ${f.score.toFixed(2)})\n${f.feedback}`
+        ).join('\n\n')
+
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `Rewrite the node addressing the following reviewer feedback, then call review_and_create_node again with round: ${round + 1} and previousRmsScores: [${allScores.map(s => s.toFixed(2)).join(', ')}].`,
+              ``,
+              feedbackInstructions,
+              roundInfo,
+            ].filter(Boolean).join('\n'),
+          }],
+          details: {},
+        }
+      }
+
       // ── When a UI is available, show the full reviewer feedback inside the
       // select prompt so the user can read the reasoning BEFORE deciding.
       if (ctx?.hasUI && ctx.ui) {
@@ -231,11 +268,16 @@ Reviewers dispatched per type:
           feedbackText ? `\n### Reviewer feedback\n\n${feedbackText}` : '',
         ].filter(Boolean).join('\n')
 
-        const choice = await ctx.ui.select(selectPrompt, [
-          'Save',
-          'Revise — I have feedback',
-          'Discard — move on',
-        ])
+        const choices = ['Save']
+        if (result.feedback.length > 0) {
+          choices.push('Accept all reviews — agent rewrites')
+          if (result.feedback.length > 1) {
+            choices.push('Accept selected reviews — choose which')
+          }
+        }
+        choices.push('Revise — I have feedback', 'Discard — move on')
+
+        const choice = await ctx.ui.select(selectPrompt, choices)
 
         if (choice === 'Save') {
           const { createNode } = await import('./tools/graph.ts')
@@ -244,6 +286,30 @@ Reviewers dispatched per type:
             content: [{ type: 'text', text: `Node '${params.id}' saved.` }],
             details: {},
           }
+        }
+
+        if (choice === 'Accept all reviews — agent rewrites') {
+          return buildAcceptRewriteResponse(result.feedback)
+        }
+
+        if (choice === 'Accept selected reviews — choose which') {
+          const selectedFeedback = []
+          for (const f of result.feedback) {
+            const include = await ctx.ui.select(
+              `Include **${f.role}** review (score: ${f.score.toFixed(2)})?\n${f.feedback}`,
+              ['Yes', 'No']
+            )
+            if (include === 'Yes') {
+              selectedFeedback.push(f)
+            }
+          }
+          if (selectedFeedback.length === 0) {
+            return {
+              content: [{ type: 'text', text: `No reviews selected. Node '${params.id}' unchanged — save, revise, or discard it manually.` }],
+              details: {},
+            }
+          }
+          return buildAcceptRewriteResponse(selectedFeedback)
         }
 
         if (choice === 'Revise — I have feedback') {
@@ -269,6 +335,9 @@ Reviewers dispatched per type:
           text: [
             `## Node ready for your review`,
             ``,
+            round > 1 ? `**Round ${round}** — Previous scores: ${previousRmsScores.map(s => s.toFixed(2)).join(', ')}` : null,
+            isDecliningSuffix ? `⚠️ Scores are declining across rounds. Consider whether to discard this node and give up rather than continuing to rewrite.` : null,
+            ``,
             scoreLine,
             ``,
             `### Node draft`,
@@ -278,11 +347,12 @@ Reviewers dispatched per type:
             ``,
             `## ⚠️ STOP — present this to the user before proceeding`,
             `Show the node draft and reviewer feedback above to the user in your reply.`,
-            `Ask them explicitly: **"Should I save this node, revise it, or discard it?"**`,
+            `Ask them explicitly: **"Should I save this node, accept the reviewer feedback and have me rewrite it, revise it with your own feedback, or discard it?"**`,
+            `If they want to accept reviewer feedback, rewrite the node addressing the specific reviewer critiques above, then call review_and_create_node again with the revised content, round: ${round + 1}, and previousRmsScores: [${allScores.map(s => s.toFixed(2)).join(', ')}].`,
             `Wait for their response. Do NOT call create_node or move on until they reply.`,
-            `If they want revisions, ask what changes to make, then call review_and_create_node again with the revised content.`,
+            `If they want their own revisions, ask what changes to make, then call review_and_create_node again with the revised content.`,
             `If they want to save, call create_node with the same params.`,
-          ].filter(Boolean).join('\n'),
+          ].filter(l => l !== null && l !== undefined).join('\n'),
         }],
         details: {},
       }

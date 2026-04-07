@@ -178,7 +178,7 @@ describe('review_and_create_node — accept reviews rewrite loop', () => {
       expect(text).toContain('logic')
       expect(text).toContain('The assumption that users care about local inference is unvalidated.')
       expect(text).toContain('Cloud providers offer compelling cost advantages.')
-      expect(text).toContain('rewrite')
+      expect(text).toContain('Rewrite')
       expect(text).toContain('review_and_create_node')
     })
 
@@ -221,7 +221,7 @@ describe('review_and_create_node — accept reviews rewrite loop', () => {
       expect(text).toContain('The inference chain is reasonable but missing causality.')
       // Should NOT include the rejected review's feedback
       expect(text).not.toContain('Cloud providers offer compelling cost advantages.')
-      expect(text).toContain('rewrite')
+      expect(text).toContain('Rewrite')
     })
 
     it('includes round number in return for agent to track quality trajectory', async () => {
